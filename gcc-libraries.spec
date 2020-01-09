@@ -63,7 +63,7 @@ Provides: libquadmath
 Obsoletes: libitm
 
 Version: %{gcc_version}
-Release: %{gcc_release}.3.1%{?dist}
+Release: %{gcc_release}.4.1%{?dist}
 # libgcc, libgfortran, libmudflap, libgomp, libstdc++ and crtstuff have
 # GCC Runtime Exception.
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
@@ -193,6 +193,11 @@ Patch1002: gcc7-alt-compat-test.patch
 Patch1005: gcc7-rh1118870.patch
 Patch1100: gcc7-htm-in-asm.patch
 
+# Support for more DEC extensions in libgfortran runtime
+# BZ1554429
+Patch2000: 0000-infrastructure.patch
+Patch2001: 0022-Default-values-for-certain-field-descriptors-in-form.patch
+
 %if 0%{?rhel} >= 7
 %global nonsharedver 48
 %else
@@ -312,6 +317,9 @@ sed -i -e 's/ -Wl,-z,nodlopen//g' gcc/ada/gcc-interface/Makefile.in
 
 %patch1005 -p0 -b .rh1118870~
 %patch1100 -p0 -b .gcc6-htm-in-asm~
+
+%patch2000 -p1 -b .dec-extensions~
+%patch2001 -p1 -b .dec-extensions-2~
 
 %if 0%{?rhel} == 6
 # Default to -gdwarf-3 rather than -gdwarf-4
@@ -718,6 +726,9 @@ fi
 %doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/gfortran/*
 
 %changelog
+* Tue Apr  3 2018 Marek Polacek <polacek@redhat.com> 7.1.1-2.4.1
+- Add support for DEC formatting extensions (#1563082)
+
 * Tue Jul  4 2017 Marek Polacek <polacek@redhat.com> 7.1.1-2.3.1
 - ship libquadmath on RHEL6
 
