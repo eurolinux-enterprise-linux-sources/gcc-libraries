@@ -435,7 +435,7 @@ diff --git a/libgfortran/io/write_float.def b/libgfortran/io/write_float.def
 index 7f0aa1d..73dc910 100644
 --- a/libgfortran/io/write_float.def
 +++ b/libgfortran/io/write_float.def
-@@ -113,7 +113,8 @@ determine_precision (st_parameter_dt * dtp, const fnode * f, int len)
+@@ -113,7 +113,8 @@ determine_precision (st_parameter_dt * d
  static void
  build_float_string (st_parameter_dt *dtp, const fnode *f, char *buffer,
  		    size_t size, int nprinted, int precision, int sign_bit,
@@ -445,7 +445,7 @@ index 7f0aa1d..73dc910 100644
  {
    char *put;
    char *digits;
-@@ -132,8 +133,17 @@ build_float_string (st_parameter_dt *dtp, const fnode *f, char *buffer,
+@@ -132,8 +133,17 @@ build_float_string (st_parameter_dt *dtp
    sign_t sign;
  
    ft = f->format;
@@ -463,9 +463,9 @@ index 7f0aa1d..73dc910 100644
 +      d = f->u.real.d;
 +    }
    p = dtp->u.p.scale_factor;
+   *len = 0;
  
-   rchar = '5';
-@@ -958,6 +968,11 @@ determine_en_precision (st_parameter_dt *dtp, const fnode *f,
+@@ -959,6 +969,11 @@ determine_en_precision (st_parameter_dt
        int save_scale_factor;\
        volatile GFC_REAL_ ## x temp;\
        save_scale_factor = dtp->u.p.scale_factor;\
@@ -477,7 +477,7 @@ index 7f0aa1d..73dc910 100644
        switch (dtp->u.p.current_unit->round_status)\
  	{\
  	  case ROUND_ZERO:\
-@@ -1033,7 +1048,8 @@ determine_en_precision (st_parameter_dt *dtp, const fnode *f,
+@@ -1034,7 +1049,8 @@ determine_en_precision (st_parameter_dt
  	  nprinted = FDTOA(y,precision,m);\
  	}\
        build_float_string (dtp, &newf, buffer, size, nprinted, precision,\
@@ -487,7 +487,7 @@ index 7f0aa1d..73dc910 100644
        dtp->u.p.scale_factor = save_scale_factor;\
      }\
    else\
-@@ -1043,7 +1059,8 @@ determine_en_precision (st_parameter_dt *dtp, const fnode *f,
+@@ -1044,7 +1060,8 @@ determine_en_precision (st_parameter_dt
        else\
  	nprinted = DTOA(y,precision,m);\
        build_float_string (dtp, f, buffer, size, nprinted, precision,\
@@ -497,7 +497,7 @@ index 7f0aa1d..73dc910 100644
      }\
  }\
  
-@@ -1057,6 +1074,16 @@ get_float_string (st_parameter_dt *dtp, const fnode *f, const char *source,
+@@ -1058,6 +1075,16 @@ get_float_string (st_parameter_dt *dtp,
  {
    int sign_bit, nprinted;
    bool zero_flag;
