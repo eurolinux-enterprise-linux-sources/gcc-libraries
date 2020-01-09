@@ -1,9 +1,10 @@
-%global DATE 20160916
-%global SVNREV 240184
-%global gcc_version 6.2.1
+%global DATE 20170526
+%global SVNREV 248505
+%global gcc_version 7.1.1
+%global gcc_major 7
 # Note, gcc_release must be integer, if you want to add suffixes to
 # %{release}, append them after %{gcc_release} on Release: line.
-%global gcc_release 1
+%global gcc_release 2
 %global mpc_version 0.8.1
 %global _unpackaged_files_terminate_build 0
 %global multilib_64_archs sparc64 ppc64 s390x x86_64
@@ -19,22 +20,54 @@
 %ifarch x86_64
 %global multilib_32_arch i686
 %endif
+%ifarch %{ix86} x86_64 ia64
+%global build_libquadmath 1
+%else
+%global build_libquadmath 0
+%endif
 %ifarch %{ix86} x86_64
 %global build_libcilkrts 1
 %else
 %global build_libcilkrts 0
 %endif
+%ifarch aarch64
+%if 0%{?rhel} >= 7
+%global build_libatomic 1
+%else
+%global build_libatomic 0
+%endif
+%endif
+%ifnarch aarch64
+%if 0%{?rhel} >= 7
+%global build_libatomic 0
+%else
+%global build_libatomic 1
+%endif
+%endif
+%if 0%{?rhel} >= 7
+%global build_libitm 0
+%else
+%global build_libitm 1
+%endif
+%ifarch %{ix86} x86_64 ppc ppc64 ppc64le ppc64p7 s390 s390x %{arm} aarch64 %{mips}
+%global attr_ifunc 1
+%else
+%global attr_ifunc 0
+%endif
 Summary: GCC runtime libraries
 Name: gcc-libraries
-Provides: libatomic libitm libcilkrts libmpx
+Provides: libatomic libitm libcilkrts libgfortran4
+%if 0%{?rhel} < 7
+Provides: libquadmath
+%endif
 Obsoletes: libitm
 
 Version: %{gcc_version}
-Release: %{gcc_release}.1.1%{?dist}
+Release: %{gcc_release}.3.1%{?dist}
 # libgcc, libgfortran, libmudflap, libgomp, libstdc++ and crtstuff have
 # GCC Runtime Exception.
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
-Group: Development/Languages
+Group: System Environment/Libraries
 # The source for this package was pulled from upstream's vcs.  Use the
 # following commands to generate the tarball:
 # svn export svn://gcc.gnu.org/svn/gcc/branches/redhat/gcc-5-branch@%{SVNREV} gcc-%{version}-%{DATE}
@@ -61,7 +94,6 @@ BuildRequires: /usr/bin/pod2man
 %if 0%{?rhel} >= 7
 BuildRequires: texinfo-tex
 %endif
-#BuildRequires: systemtap-sdt-devel >= 1.3
 # For VTA guality testing
 BuildRequires: gdb
 # Make sure pthread.h doesn't contain __thread tokens
@@ -110,7 +142,7 @@ BuildRequires: libmpc-devel >= 0.8.1
 %endif
 Requires(post): /sbin/install-info
 Requires(preun): /sbin/install-info
-ExclusiveArch: %{ix86} x86_64 ppc ppc64 s390 s390x
+ExclusiveArch: %{ix86} x86_64 ppc ppc64 ppc64le s390 s390x aarch64
 
 %global oformat %{nil}
 %global oformat2 %{nil}
@@ -143,26 +175,23 @@ ExclusiveArch: %{ix86} x86_64 ppc ppc64 s390 s390x
 %global oformat OUTPUT_FORMAT(elf64-powerpcle)
 %endif
 
-Patch0: gcc6-hack.patch
-Patch1: gcc6-java-nomulti.patch
-Patch2: gcc6-ppc32-retaddr.patch
-Patch3: gcc6-rh330771.patch
-Patch4: gcc6-i386-libgomp.patch
-Patch5: gcc6-sparc-config-detection.patch
-Patch6: gcc6-libgomp-omp_h-multilib.patch
-Patch7: gcc6-libtool-no-rpath.patch
-Patch10: gcc6-no-add-needed.patch
-Patch11: gcc6-libgo-p224.patch
-Patch12: gcc6-aarch64-async-unw-tables.patch
-Patch13: gcc6-libsanitize-aarch64-va42.patch
+Patch0: gcc7-hack.patch
+Patch1: gcc7-ppc32-retaddr.patch
+Patch2: gcc7-i386-libgomp.patch
+Patch3: gcc7-sparc-config-detection.patch
+Patch4: gcc7-libgomp-omp_h-multilib.patch
+Patch5: gcc7-libtool-no-rpath.patch
+Patch6: gcc7-isl-dl.patch
+Patch7: gcc7-libstdc++-docs.patch
+Patch8: gcc7-no-add-needed.patch
+Patch9: gcc7-aarch64-async-unw-tables.patch
+Patch10: gcc7-foffload-default.patch
+Patch11: gcc7-Wno-format-security.patch
+Patch12: gcc7-pr80725.patch
 
-Patch1000: gcc6-libstdc++-compat.patch
-Patch1001: gcc6-libgfortran-compat.patch
-Patch1002: gcc6-alt-compat-test.patch
-Patch1003: gcc6-libquadmath-compat.patch
-Patch1004: gcc6-libstdc++44-xfail.patch
-Patch1005: gcc6-rh1118870.patch
-Patch1100: gcc6-htm-in-asm.patch
+Patch1002: gcc7-alt-compat-test.patch
+Patch1005: gcc7-rh1118870.patch
+Patch1100: gcc7-htm-in-asm.patch
 
 %if 0%{?rhel} >= 7
 %global nonsharedver 48
@@ -183,7 +212,7 @@ Patch1100: gcc6-htm-in-asm.patch
 
 %description
 This package contains various GCC runtime libraries, such as libatomic,
-or libitm.
+libcilkrts, libgfortran, or libitm.
 
 %package -n libitm
 Summary: The GNU Transactional Memory library
@@ -225,6 +254,34 @@ Requires(preun): /sbin/install-info
 This package contains the Memory Protection Extensions runtime libraries
 which is used for -fcheck-pointer-bounds -mmpx instrumented programs.
 
+%package -n libgfortran4
+Summary: Fortran runtime
+Group: System Environment/Libraries
+Autoreq: true
+%if %{build_libquadmath}
+Requires: libquadmath
+%endif
+%if "%{version}" != "%{gcc_version}"
+Provides: libgfortran = %{gcc_provides}
+%endif
+
+%description -n libgfortran4
+This package contains Fortran shared library which is needed to run
+Fortran dynamically linked programs.
+
+%package -n libquadmath
+Summary: GCC __float128 shared support library
+Group: System Environment/Libraries
+Requires(post): /sbin/install-info
+Requires(preun): /sbin/install-info
+%if "%{version}" != "%{gcc_version}"
+Provides: libquadmath = %{gcc_provides}
+%endif
+
+%description -n libquadmath
+This package contains GCC shared support library which is needed
+for __float128 math support and for Fortran REAL*16 support.
+
 %prep
 %if 0%{?rhel} >= 7
 %setup -q -n gcc-%{version}-%{DATE}
@@ -232,23 +289,19 @@ which is used for -fcheck-pointer-bounds -mmpx instrumented programs.
 %setup -q -n gcc-%{version}-%{DATE} -a 1
 %endif
 %patch0 -p0 -b .hack~
-%patch1 -p0 -b .java-nomulti~
-%patch2 -p0 -b .ppc32-retaddr~
-%patch3 -p0 -b .rh330771~
-%patch4 -p0 -b .i386-libgomp~
-%patch5 -p0 -b .sparc-config-detection~
-%patch6 -p0 -b .libgomp-omp_h-multilib~
-%patch7 -p0 -b .libtool-no-rpath~
-%patch10 -p0 -b .no-add-needed~
-%patch11 -p0 -b .libgo-p224~
-rm -f libgo/go/crypto/elliptic/p224{,_test}.go
-%patch12 -p0 -b .aarch64-async-unw-tables~
-%patch13 -p0 -b .libsanitize-aarch64-va42~
+%patch1 -p0 -b .ppc32-retaddr~
+%patch2 -p0 -b .i386-libgomp~
+%patch3 -p0 -b .sparc-config-detection~
+%patch4 -p0 -b .libgomp-omp_h-multilib~
+%patch5 -p0 -b .libtool-no-rpath~
+%patch8 -p0 -b .no-add-needed~
+%patch9 -p0 -b .aarch64-async-unw-tables~
+%patch10 -p0 -b .foffload-default~
+%patch11 -p0 -b .Wno-format-security~
+%patch12 -p0 -b .pr80725~
+
 sed -i -e 's/ -Wl,-z,nodlopen//g' gcc/ada/gcc-interface/Makefile.in
 
-# Can ignore nonshared stuff here.
-#%patch1000 -p0 -b .libstdc++-compat~
-#%patch1001 -p0 -b .libgfortran-compat~
 %ifarch %{ix86} x86_64
 %if 0%{?rhel} < 7
 # On i?86/x86_64 there are some incompatibilities in _Decimal* as well as
@@ -257,14 +310,6 @@ sed -i -e 's/ -Wl,-z,nodlopen//g' gcc/ada/gcc-interface/Makefile.in
 %endif
 %endif
 
-#%if 0%{?rhel} < 7
-#%patch1003 -p0 -b .libquadmath-compat~
-#%endif
-
-# We probably don't care about libstdc++ testsuite here.
-#%if 0%{?rhel} == 6
-#%patch1004 -p0 -b .libstdc++44-xfail~
-#%endif
 %patch1005 -p0 -b .rh1118870~
 %patch1100 -p0 -b .gcc6-htm-in-asm~
 
@@ -360,13 +405,13 @@ CC="$CC" CXX="$CXX" CFLAGS="$OPT_FLAGS" \
 	XCFLAGS="$OPT_FLAGS" TCFLAGS="$OPT_FLAGS" \
 	GCJFLAGS="$OPT_FLAGS" \
 	../configure --prefix=%{_prefix} --mandir=%{_mandir} --infodir=%{_infodir} \
-	--with-bugurl=http://bugzilla.redhat.com/bugzilla --disable-bootstrap \
+	--with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-bootstrap \
 	--enable-shared --enable-threads=posix --enable-checking=release \
-	--enable-multilib \
+	--enable-multilib --disable-libsanitizer \
 	--with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions \
 	--enable-gnu-unique-object \
 	--enable-linker-build-id \
-	--enable-languages=c,c++,lto \
+	--enable-languages=c,c++,lto,fortran \
 	--enable-plugin --with-linker-hash-style=gnu \
 %if 0%{?rhel} >= 7
 	--enable-initfini-array \
@@ -401,11 +446,16 @@ CC="$CC" CXX="$CXX" CFLAGS="$OPT_FLAGS" \
 %ifarch sparc sparcv9
 	--host=%{gcc_target_platform} --build=%{gcc_target_platform} --target=%{gcc_target_platform} --with-cpu=v7
 %endif
-%ifarch ppc ppc64 ppc64le ppc64p7
+%ifarch ppc ppc64 ppc64p7
 %if 0%{?rhel} >= 7
 	--with-cpu-32=power7 --with-tune-32=power7 --with-cpu-64=power7 --with-tune-64=power7 \
 %else
 	--with-cpu-32=power4 --with-tune-32=power6 --with-cpu-64=power4 --with-tune-64=power6 \
+%endif
+%endif
+%ifarch ppc64le
+%if 0%{?rhel} >= 7
+	--with-cpu-32=power8 --with-tune-32=power8 --with-cpu-64=power8 --with-tune-64=power8 \
 %endif
 %endif
 %ifarch ppc
@@ -427,19 +477,31 @@ CC="$CC" CXX="$CXX" CFLAGS="$OPT_FLAGS" \
 	--build=%{gcc_target_platform}
 %endif
 
+%ifarch ppc64
+GCJFLAGS="$OPT_FLAGS" make %{?_smp_mflags} BOOT_CFLAGS="$OPT_FLAGS" STAGE1_CFLAGS="-O" STAGE1_CXXFLAGS="-O"
+%else
 GCJFLAGS="$OPT_FLAGS" make %{?_smp_mflags} BOOT_CFLAGS="$OPT_FLAGS"
+%endif
 
 # Copy various doc files here and there
 cd ..
-mkdir -p rpm.doc/libatomic rpm.doc/libitm rpm.doc/libcilkrts rpm.doc/libmpx
+mkdir -p rpm.doc/gfortran rpm.doc/libatomic rpm.doc/libitm rpm.doc/libcilkrts rpm.doc/libmpx
 
+(cd libgfortran; for i in ChangeLog*; do
+	cp -p $i ../rpm.doc/gfortran/$i.libgfortran
+done)
+
+%if %{build_libitm}
 (cd libitm; for i in ChangeLog*; do
 	cp -p $i ../rpm.doc/libitm/$i.libitm
 done)
+%endif
 
+%if %{build_libatomic}
 (cd libatomic; for i in ChangeLog*; do
 	cp -p $i ../rpm.doc/libatomic/$i.libatomic
 done)
+%endif
 
 %if %{build_libcilkrts}
 (cd libcilkrts; for i in ChangeLog*; do
@@ -467,18 +529,22 @@ mkdir -p %{buildroot}%{_prefix}/%{_lib}
 mkdir -p %{buildroot}%{_infodir}
 
 # Use make install DESTDIR trick to avoid bogus RPATHs.
+%if %{build_libitm}
 cd %{gcc_target_platform}/libitm/
 mkdir temp
 make install DESTDIR=`pwd`/temp
 cp -a temp/usr/%{_lib}/libitm.so.1* %{buildroot}%{_prefix}/%{_lib}/
 cp -a libitm.info %{buildroot}%{_infodir}/
 cd ../..
+%endif
 
+%if %{build_libatomic}
 cd %{gcc_target_platform}/libatomic/
 mkdir temp
 make install DESTDIR=`pwd`/temp
 cp -a temp/usr/%{_lib}/libatomic.so.1* %{buildroot}%{_prefix}/%{_lib}/
 cd ../..
+%endif
 
 %if %{build_libcilkrts}
 cd %{gcc_target_platform}/libcilkrts/
@@ -488,6 +554,31 @@ cp -a temp/usr/%{_lib}/libcilkrts.so.5* %{buildroot}%{_prefix}/%{_lib}/
 cd ../..
 %endif
 
+%if %{build_libquadmath}
+cd %{gcc_target_platform}/libquadmath/
+mkdir temp
+make install DESTDIR=`pwd`/temp
+cp -a temp/usr/%{_lib}/libquadmath.so.0* %{buildroot}%{_prefix}/%{_lib}/
+cd ../..
+%endif
+
+cd %{gcc_target_platform}/libgfortran/
+mkdir temp
+%if %{build_libquadmath}
+# It needs to find libquadmath.so.
+export LIBRARY_PATH=`pwd`/../../%{gcc_target_platform}/libquadmath/temp/usr/%{_lib}
+%endif
+make install DESTDIR=`pwd`/temp
+cp -a temp/usr/%{_lib}/libgfortran.so.4* %{buildroot}%{_prefix}/%{_lib}/
+cd ../..
+
+
+# Remove binaries we will not be including, so that they don't end up in
+# gcc-libraries-debuginfo.
+%if 0%{?rhel} >= 7
+rm -f %{buildroot}%{_prefix}/%{_lib}/libquadmath.so*
+%endif
+
 rm -f gcc/libgcc_s.so
 ln -sf libgcc_s.so.1 gcc/libgcc_s.so
 
@@ -495,7 +586,11 @@ ln -sf libgcc_s.so.1 gcc/libgcc_s.so
 cd obj-%{gcc_target_platform}
 
 # run the tests.
+%ifnarch ppc64le
 make %{?_smp_mflags} -k check RUNTESTFLAGS="--target_board=unix/'{,-fstack-protector}'" || :
+%else
+make %{?_smp_mflags} -k check || :
+%endif
 ( LC_ALL=C ../contrib/test_summary -t || : ) 2>&1 | sed -n '/^cat.*EOF/,/^EOF/{/^cat.*EOF/d;/^EOF/d;/^LAST_UPDATED:/d;p;}' > testresults
 echo ====================TESTING=========================
 cat testresults
@@ -532,6 +627,15 @@ if [ -f %{_infodir}/libcilkrts.info.gz ]; then
     --info-dir=%{_infodir} %{_infodir}/libcilkrts.info.gz || :
 fi
 
+%post -n libgfortran4
+/sbin/ldconfig
+if [ -f %{_infodir}/libgfortran.info.gz ]; then
+  /sbin/install-info \
+    --info-dir=%{_infodir} %{_infodir}/libgfortran.info.gz || :
+fi
+
+%post -n libmpx -p /sbin/ldconfig
+
 %preun -n libitm
 if [ $1 = 0 -a -f %{_infodir}/libitm.info.gz ]; then
   /sbin/install-info --delete \
@@ -542,6 +646,18 @@ fi
 if [ $1 = 0 -a -f %{_infodir}/libatomic.info.gz ]; then
   /sbin/install-info --delete \
     --info-dir=%{_infodir} %{_infodir}/libatomic.info.gz || :
+fi
+
+%preun -n libgfortran4
+if [ $1 = 0 -a -f %{_infodir}/libgfortran.info.gz ]; then
+  /sbin/install-info --delete \
+    --info-dir=%{_infodir} %{_infodir}/libgfortran.info.gz || :
+fi
+
+%preun -n libquadmath
+if [ $1 = 0 -a -f %{_infodir}/libquadmath.info.gz ]; then
+  /sbin/install-info --delete \
+    --info-dir=%{_infodir} %{_infodir}/libquadmath.info.gz || :
 fi
 
 %preun -n libcilkrts
@@ -556,22 +672,28 @@ fi
 
 %postun -n libcilkrts -p /sbin/ldconfig
 
-%post -n libmpx -p /sbin/ldconfig
+%postun -n libgfortran4 -p /sbin/ldconfig
 
 %postun -n libmpx -p /sbin/ldconfig
 
+%postun -n libquadmath -p /sbin/ldconfig
+
+%if %{build_libitm}
 %files -n libitm
 %defattr(-,root,root,-)
 %{_prefix}/%{_lib}/libitm.so.1*
 %{_infodir}/libitm.info*
 
 %doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/libitm/*
+%endif
 
+%if %{build_libatomic}
 %files -n libatomic
 %defattr(-,root,root,-)
 %{_prefix}/%{_lib}/libatomic.so.1*
 
 %doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/libatomic/*
+%endif
 
 %if %{build_libcilkrts}
 %files -n libcilkrts
@@ -581,7 +703,55 @@ fi
 %doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/libcilkrts/*
 %endif
 
+%files -n libgfortran4
+%defattr(-,root,root,-)
+%{_prefix}/%{_lib}/libgfortran.so.4*
+
+%if 0%{?rhel} < 7
+%if %{build_libquadmath}
+%files -n libquadmath
+%defattr(-,root,root,-)
+%{_prefix}/%{_lib}/libquadmath.so.*
+%endif
+%endif
+
+%doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/gfortran/*
+
 %changelog
+* Tue Jul  4 2017 Marek Polacek <polacek@redhat.com> 7.1.1-2.3.1
+- ship libquadmath on RHEL6
+
+* Tue Jun 20 2017 Marek Polacek <polacek@redhat.com> 7.1.1-2.2.1
+- don't run make check with -fstack-protector on ppc64le
+
+* Thu Jun 15 2017 Marek Polacek <polacek@redhat.com> 7.1.1-2.1.1
+- bump gcc_release (DTS7 gcc-gfortran requires libgfortran4 >= 7.1.1-2)
+
+* Mon Jun 12 2017 Marek Polacek <polacek@redhat.com> 7.1.1-1.2.1
+- remove libquadmath.so.* so that it doesn't end up in debuginfo
+
+* Mon Jun  5 2017 Marek Polacek <polacek@redhat.com> 7.1.1-1.1.1
+- rename libgfortran2 to libgfortran4
+- update from Fedora gcc-7.1.1-2.fc27
+ 
+* Wed May 24 2017 Marek Polacek <polacek@redhat.com> 7.0.1-4.2.1
+- also build on ppc64le
+
+* Mon Mar 20 2017 Marek Polacek <polacek@redhat.com> 7.0.1-4.1.1
+- also build on aarch64
+- drop libitm
+- only enable libatomic for aarch64
+
+* Fri Mar 17 2017 Marek Polacek <polacek@redhat.com> 7.0.1-3.1.1
+- drop libquadmath and rename libgfortran to libgfortran2
+
+* Wed Mar 15 2017 Marek Polacek <polacek@redhat.com> 7.0.1-2.1.1
+- also include the libquadmath subpackage
+
+* Tue Mar 14 2017 Marek Polacek <polacek@redhat.com> 7.0.1-1.1.1
+- update from Fedora 7.0.1-0.12.fc26 (#1412815)
+- add the libgfortran subpackage
+
 * Wed Oct 19 2016 Marek Polacek <polacek@redhat.com> 6.2.1-1.1.1
 - update from DTS 6.2.1 (#1265255)
 

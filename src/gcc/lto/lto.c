@@ -1,5 +1,5 @@
 /* Top-level LTO routines.
-   Copyright (C) 2009-2016 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
    Contributed by CodeSourcery, Inc.
 
 This file is part of GCC.
@@ -36,6 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "toplev.h"
 #include "stor-layout.h"
 #include "symbol-summary.h"
+#include "tree-vrp.h"
 #include "ipa-prop.h"
 #include "common.h"
 #include "debug.h"
@@ -372,7 +373,9 @@ hash_canonical_type (tree type)
       tree f;
 
       for (f = TYPE_FIELDS (type), nf = 0; f; f = TREE_CHAIN (f))
-	if (TREE_CODE (f) == FIELD_DECL)
+	if (TREE_CODE (f) == FIELD_DECL
+	    && (! DECL_SIZE (f)
+		|| ! integer_zerop (DECL_SIZE (f))))
 	  {
 	    iterative_hash_canonical_type (TREE_TYPE (f), hstate);
 	    nf++;
@@ -1061,12 +1064,6 @@ compare_tree_sccs_1 (tree t1, tree t2, tree **map)
 			TREE_FIXED_CST_PTR (t1), TREE_FIXED_CST_PTR (t2)))
       return false;
 
-
-  /* We want to compare locations up to the point where it makes
-     a difference for streaming - thus whether the decl is builtin or not.  */
-  if (CODE_CONTAINS_STRUCT (code, TS_DECL_MINIMAL))
-    compare_values (streamer_handle_as_builtin_p);
-
   if (CODE_CONTAINS_STRUCT (code, TS_DECL_COMMON))
     {
       compare_values (DECL_MODE);
@@ -1165,6 +1162,8 @@ compare_tree_sccs_1 (tree t1, tree t2, tree **map)
 	}
       else if (code == ARRAY_TYPE)
 	compare_values (TYPE_NONALIASED_COMPONENT);
+      if (AGGREGATE_TYPE_P (t1))
+	compare_values (TYPE_TYPELESS_STORAGE);
       compare_values (TYPE_PACKED);
       compare_values (TYPE_RESTRICT);
       compare_values (TYPE_USER_ALIGN);
@@ -1602,8 +1601,7 @@ unify_scc (struct data_in *data_in, unsigned from,
 		   streamer.  The others should be singletons, too, and we
 		   should not merge them in any way.  */
 		gcc_assert (code != TRANSLATION_UNIT_DECL
-			    && code != IDENTIFIER_NODE
-			    && !streamer_handle_as_builtin_p (t));
+			    && code != IDENTIFIER_NODE);
 	      }
 
 	  /* Fixup the streamer cache with the prevailing nodes according
@@ -1710,8 +1708,7 @@ lto_read_decls (struct lto_file_decl_data *decl_data, const void *data,
 	  if (len == 1
 	      && (TREE_CODE (first) == IDENTIFIER_NODE
 		  || TREE_CODE (first) == INTEGER_CST
-		  || TREE_CODE (first) == TRANSLATION_UNIT_DECL
-		  || streamer_handle_as_builtin_p (first)))
+		  || TREE_CODE (first) == TRANSLATION_UNIT_DECL))
 	    continue;
 
 	  /* Try to unify the SCC with already existing ones.  */
@@ -2292,6 +2289,8 @@ do_stream_out (char *temp_filename, lto_symtab_encoder_t encoder)
   lto_set_current_out_file (file);
 
   ipa_write_optimization_summaries (encoder);
+
+  free (CONST_CAST (char *, file->filename));
 
   lto_set_current_out_file (NULL);
   lto_obj_file_close (file);
@@ -3099,6 +3098,10 @@ do_whole_program_analysis (void)
 
   execute_ipa_pass_list (g->get_passes ()->all_regular_ipa_passes);
 
+  /* When WPA analysis raises errors, do not bother to output anything.  */
+  if (seen_error ())
+    return;
+
   if (symtab->dump_file)
     {
       fprintf (symtab->dump_file, "Optimized ");
@@ -3117,9 +3120,10 @@ do_whole_program_analysis (void)
   else if (flag_lto_partition == LTO_PARTITION_MAX)
     lto_max_map ();
   else if (flag_lto_partition == LTO_PARTITION_ONE)
-    lto_balanced_map (1);
+    lto_balanced_map (1, INT_MAX);
   else if (flag_lto_partition == LTO_PARTITION_BALANCED)
-    lto_balanced_map (PARAM_VALUE (PARAM_LTO_PARTITIONS));
+    lto_balanced_map (PARAM_VALUE (PARAM_LTO_PARTITIONS),
+		      PARAM_VALUE (MAX_PARTITION_SIZE));
   else
     gcc_unreachable ();
 
@@ -3244,7 +3248,7 @@ offload_handle_link_vars (void)
 	TREE_TYPE (link_ptr_var) = type;
 	TREE_USED (link_ptr_var) = 1;
 	TREE_STATIC (link_ptr_var) = 1;
-	DECL_MODE (link_ptr_var) = TYPE_MODE (type);
+	SET_DECL_MODE (link_ptr_var, TYPE_MODE (type));
 	DECL_SIZE (link_ptr_var) = TYPE_SIZE (type);
 	DECL_SIZE_UNIT (link_ptr_var) = TYPE_SIZE_UNIT (type);
 	DECL_ARTIFICIAL (link_ptr_var) = 1;
@@ -3321,6 +3325,9 @@ lto_main (void)
 	  materialize_cgraph ();
 	  if (!flag_ltrans)
 	    lto_promote_statics_nonwpa ();
+
+	  /* Annotate the CU DIE and mark the early debug phase as finished.  */
+	  debug_hooks->early_finish ("<artificial>");
 
 	  /* Let the middle end know that we have read and merged all of
 	     the input files.  */ 

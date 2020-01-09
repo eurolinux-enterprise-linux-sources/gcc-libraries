@@ -1,6 +1,6 @@
 /* C++-specific tree lowering bits; see also c-gimplify.c and tree-gimple.c.
 
-   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
    Contributed by Jason Merrill <jason@redhat.com>
 
 This file is part of GCC.
@@ -32,12 +32,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimplify.h"
 #include "c-family/c-ubsan.h"
 #include "cilk.h"
+#include "cp-cilkplus.h"
 
 /* Forward declarations.  */
 
 static tree cp_genericize_r (tree *, int *, void *);
 static tree cp_fold_r (tree *, int *, void *);
-static void cp_genericize_tree (tree*);
+static void cp_genericize_tree (tree*, bool);
 static tree cp_fold (tree);
 
 /* Local declarations.  */
@@ -361,7 +362,7 @@ genericize_continue_stmt (tree *stmt_p)
   tree label = get_bc_label (bc_continue);
   location_t location = EXPR_LOCATION (*stmt_p);
   tree jump = build1_loc (location, GOTO_EXPR, void_type_node, label);
-  append_to_statement_list (pred, &stmt_list);
+  append_to_statement_list_force (pred, &stmt_list);
   append_to_statement_list (jump, &stmt_list);
   *stmt_p = stmt_list;
 }
@@ -495,9 +496,8 @@ cp_gimplify_init_expr (tree *expr_p)
 	    TREE_TYPE (from) = void_type_node;
 	}
 
-      if (cxx_dialect >= cxx14 && TREE_CODE (sub) == CONSTRUCTOR)
-	/* Handle aggregate NSDMI.  */
-	replace_placeholders (sub, to);
+      /* Handle aggregate NSDMI.  */
+      replace_placeholders (sub, to);
 
       if (t == sub)
 	break;
@@ -548,6 +548,7 @@ simple_empty_class_p (tree type, tree op)
   return
     ((TREE_CODE (op) == COMPOUND_EXPR
       && simple_empty_class_p (type, TREE_OPERAND (op, 1)))
+     || TREE_CODE (op) == EMPTY_CLASS_EXPR
      || is_gimple_lvalue (op)
      || INDIRECT_REF_P (op)
      || (TREE_CODE (op) == CONSTRUCTOR
@@ -558,12 +559,40 @@ simple_empty_class_p (tree type, tree op)
     && is_really_empty_class (type);
 }
 
+/* Returns true if evaluating E as an lvalue has side-effects;
+   specifically, a volatile lvalue has TREE_SIDE_EFFECTS, but it doesn't really
+   have side-effects until there is a read or write through it.  */
+
+static bool
+lvalue_has_side_effects (tree e)
+{
+  if (!TREE_SIDE_EFFECTS (e))
+    return false;
+  while (handled_component_p (e))
+    {
+      if (TREE_CODE (e) == ARRAY_REF
+	  && TREE_SIDE_EFFECTS (TREE_OPERAND (e, 1)))
+	return true;
+      e = TREE_OPERAND (e, 0);
+    }
+  if (DECL_P (e))
+    /* Just naming a variable has no side-effects.  */
+    return false;
+  else if (INDIRECT_REF_P (e))
+    /* Similarly, indirection has no side-effects.  */
+    return TREE_SIDE_EFFECTS (TREE_OPERAND (e, 0));
+  else
+    /* For anything else, trust TREE_SIDE_EFFECTS.  */
+    return TREE_SIDE_EFFECTS (e);
+}
+
 /* Do C++-specific gimplification.  Args are as for gimplify_expr.  */
 
 int
 cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 {
   int saved_stmts_are_full_exprs_p = 0;
+  location_t loc = EXPR_LOC_OR_LOC (*expr_p, input_location);
   enum tree_code code = TREE_CODE (*expr_p);
   enum gimplify_status ret;
 
@@ -594,7 +623,7 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 				  tf_warning_or_error);
 	hash_set<tree> pset;
 	cp_walk_tree (expr_p, cp_fold_r, &pset, NULL);
-	cp_genericize_tree (expr_p);
+	cp_genericize_tree (expr_p, false);
 	ret = GS_OK;
 	input_location = loc;
       }
@@ -617,7 +646,7 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
     case INIT_EXPR:
       if (fn_contains_cilk_spawn_p (cfun))
 	{
-	  if (cilk_detect_spawn_and_unwrap (expr_p))
+	  if (cilk_cp_detect_spawn_and_unwrap (expr_p))
 	    {
 	      cilk_cp_gimplify_call_params_in_spawned_fn (expr_p,
 							  pre_p, post_p);
@@ -630,12 +659,12 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
       cp_gimplify_init_expr (expr_p);
       if (TREE_CODE (*expr_p) != INIT_EXPR)
 	return GS_OK;
-      /* Otherwise fall through.  */
+      /* Fall through.  */
     case MODIFY_EXPR:
     modify_expr_case:
       {
 	if (fn_contains_cilk_spawn_p (cfun)
-	    && cilk_detect_spawn_and_unwrap (expr_p)
+	    && cilk_cp_detect_spawn_and_unwrap (expr_p)
 	    && !seen_error ())
 	  {
 	    cilk_cp_gimplify_call_params_in_spawned_fn (expr_p, pre_p, post_p);
@@ -659,8 +688,6 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 	    /* Remove any copies of empty classes.  Also drop volatile
 	       variables on the RHS to avoid infinite recursion from
 	       gimplify_expr trying to load the value.  */
-	    gimplify_expr (&TREE_OPERAND (*expr_p, 0), pre_p, post_p,
-			   is_gimple_lvalue, fb_lvalue);
 	    if (TREE_SIDE_EFFECTS (op1))
 	      {
 		if (TREE_THIS_VOLATILE (op1)
@@ -669,8 +696,29 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 
 		gimplify_and_add (op1, pre_p);
 	      }
+	    gimplify_expr (&TREE_OPERAND (*expr_p, 0), pre_p, post_p,
+			   is_gimple_lvalue, fb_lvalue);
 	    *expr_p = TREE_OPERAND (*expr_p, 0);
 	  }
+	/* P0145 says that the RHS is sequenced before the LHS.
+	   gimplify_modify_expr gimplifies the RHS before the LHS, but that
+	   isn't quite strong enough in two cases:
+
+	   1) gimplify.c wants to leave a CALL_EXPR on the RHS, which would
+	   mean it's evaluated after the LHS.
+
+	   2) the value calculation of the RHS is also sequenced before the
+	   LHS, so for scalar assignment we need to preevaluate if the
+	   RHS could be affected by LHS side-effects even if it has no
+	   side-effects of its own.  We don't need this for classes because
+	   class assignment takes its RHS by reference.  */
+       else if (flag_strong_eval_order > 1
+                && TREE_CODE (*expr_p) == MODIFY_EXPR
+                && lvalue_has_side_effects (op0)
+		&& (TREE_CODE (op1) == CALL_EXPR
+		    || (SCALAR_TYPE_P (TREE_TYPE (op1))
+			&& !TREE_CONSTANT (op1))))
+	 TREE_OPERAND (*expr_p, 1) = get_formal_tmp_var (op1, pre_p);
       }
       ret = GS_OK;
       break;
@@ -736,7 +784,7 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 
     case CILK_SPAWN_STMT:
       gcc_assert(fn_contains_cilk_spawn_p (cfun)
-		 && cilk_detect_spawn_and_unwrap (expr_p));
+		 && cilk_cp_detect_spawn_and_unwrap (expr_p));
 
       if (!seen_error ())
 	{
@@ -747,27 +795,50 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 
     case CALL_EXPR:
       if (fn_contains_cilk_spawn_p (cfun)
-	  && cilk_detect_spawn_and_unwrap (expr_p)
+	  && cilk_cp_detect_spawn_and_unwrap (expr_p)
 	  && !seen_error ())
 	{
 	  cilk_cp_gimplify_call_params_in_spawned_fn (expr_p, pre_p, post_p);
 	  return (enum gimplify_status) gimplify_cilk_spawn (expr_p);
 	}
-      /* DR 1030 says that we need to evaluate the elements of an
-	 initializer-list in forward order even when it's used as arguments to
-	 a constructor.  So if the target wants to evaluate them in reverse
-	 order and there's more than one argument other than 'this', gimplify
-	 them in order.  */
       ret = GS_OK;
-      if (PUSH_ARGS_REVERSED && CALL_EXPR_LIST_INIT_P (*expr_p)
-	  && call_expr_nargs (*expr_p) > 2)
+      if (!CALL_EXPR_FN (*expr_p))
+	/* Internal function call.  */;
+      else if (CALL_EXPR_REVERSE_ARGS (*expr_p))
 	{
-	  int nargs = call_expr_nargs (*expr_p);
-	  location_t loc = EXPR_LOC_OR_LOC (*expr_p, input_location);
-	  for (int i = 1; i < nargs; ++i)
+	  /* This is a call to a (compound) assignment operator that used
+	     the operator syntax; gimplify the RHS first.  */
+	  gcc_assert (call_expr_nargs (*expr_p) == 2);
+	  gcc_assert (!CALL_EXPR_ORDERED_ARGS (*expr_p));
+	  enum gimplify_status t
+	    = gimplify_arg (&CALL_EXPR_ARG (*expr_p, 1), pre_p, loc);
+	  if (t == GS_ERROR)
+	    ret = GS_ERROR;
+	}
+      else if (CALL_EXPR_ORDERED_ARGS (*expr_p))
+	{
+	  /* Leave the last argument for gimplify_call_expr, to avoid problems
+	     with __builtin_va_arg_pack().  */
+	  int nargs = call_expr_nargs (*expr_p) - 1;
+	  for (int i = 0; i < nargs; ++i)
 	    {
 	      enum gimplify_status t
 		= gimplify_arg (&CALL_EXPR_ARG (*expr_p, i), pre_p, loc);
+	      if (t == GS_ERROR)
+		ret = GS_ERROR;
+	    }
+	}
+      else if (flag_strong_eval_order
+	       && !CALL_EXPR_OPERATOR_SYNTAX (*expr_p))
+	{
+	  /* If flag_strong_eval_order, evaluate the object argument first.  */
+	  tree fntype = TREE_TYPE (CALL_EXPR_FN (*expr_p));
+	  if (POINTER_TYPE_P (fntype))
+	    fntype = TREE_TYPE (fntype);
+	  if (TREE_CODE (fntype) == METHOD_TYPE)
+	    {
+	      enum gimplify_status t
+		= gimplify_arg (&CALL_EXPR_ARG (*expr_p, 0), pre_p, loc);
 	      if (t == GS_ERROR)
 		ret = GS_ERROR;
 	    }
@@ -924,6 +995,7 @@ struct cp_genericize_data
   struct cp_genericize_omp_taskreg *omp_ctx;
   tree try_block;
   bool no_sanitize_p;
+  bool handle_invisiref_parm_p;
 };
 
 /* Perform any pre-gimplification folding of C++ front end trees to
@@ -1031,18 +1103,11 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
       && omp_var_to_track (stmt))
     omp_cxx_notice_variable (wtd->omp_ctx, stmt);
 
-  /* Don't dereference parms in a thunk, pass the references through. */
-  if ((TREE_CODE (stmt) == CALL_EXPR && CALL_FROM_THUNK_P (stmt))
-      || (TREE_CODE (stmt) == AGGR_INIT_EXPR && AGGR_INIT_FROM_THUNK_P (stmt)))
-    {
-      *walk_subtrees = 0;
-      return NULL;
-    }
-
-  /* Otherwise, do dereference invisible reference parms.  */
-  if (is_invisiref_parm (stmt))
+  /* Dereference invisible reference parms.  */
+  if (wtd->handle_invisiref_parm_p && is_invisiref_parm (stmt))
     {
       *stmt_p = convert_from_reference (stmt);
+      p_set->add (*stmt_p);
       *walk_subtrees = 0;
       return NULL;
     }
@@ -1061,6 +1126,19 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
 	  *stmt_p = h->to;
 	  *walk_subtrees = 0;
 	  return NULL;
+	}
+    }
+
+  if (TREE_CODE (stmt) == INTEGER_CST
+      && TREE_CODE (TREE_TYPE (stmt)) == REFERENCE_TYPE
+      && (flag_sanitize & (SANITIZE_NULL | SANITIZE_ALIGNMENT))
+      && !wtd->no_sanitize_p)
+    {
+      ubsan_maybe_instrument_reference (stmt_p);
+      if (*stmt_p != stmt)
+	{
+	  *walk_subtrees = 0;
+	  return NULL_TREE;
 	}
     }
 
@@ -1279,16 +1357,8 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
   else if (TREE_CODE (stmt) == DECL_EXPR)
     {
       tree d = DECL_EXPR_DECL (stmt);
-      if (TREE_CODE (d) == VAR_DECL)
-	{
-	  gcc_assert (CP_DECL_THREAD_LOCAL_P (d) == DECL_THREAD_LOCAL_P (d));
-	  /* User var initializers should be genericized during containing
-	     BIND_EXPR genericization when walk_tree walks DECL_INITIAL
-	     of BIND_EXPR_VARS.  Artificial temporaries might not be
-	     mentioned there though, so walk them now.  */
-	  if (DECL_ARTIFICIAL (d) && !TREE_STATIC (d) && DECL_INITIAL (d))
-	    cp_walk_tree (&DECL_INITIAL (d), cp_genericize_r, data, NULL);
-	}
+      if (VAR_P (d))
+	gcc_assert (CP_DECL_THREAD_LOCAL_P (d) == DECL_THREAD_LOCAL_P (d));
     }
   else if (TREE_CODE (stmt) == OMP_PARALLEL
 	   || TREE_CODE (stmt) == OMP_TASK
@@ -1419,7 +1489,7 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
       if ((flag_sanitize & (SANITIZE_NULL | SANITIZE_ALIGNMENT))
 	  && TREE_CODE (stmt) == NOP_EXPR
 	  && TREE_CODE (TREE_TYPE (stmt)) == REFERENCE_TYPE)
-	ubsan_maybe_instrument_reference (stmt);
+	ubsan_maybe_instrument_reference (stmt_p);
       else if (TREE_CODE (stmt) == CALL_EXPR)
 	{
 	  tree fn = CALL_EXPR_FN (stmt);
@@ -1448,7 +1518,7 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
 /* Lower C++ front end trees to GENERIC in T_P.  */
 
 static void
-cp_genericize_tree (tree* t_p)
+cp_genericize_tree (tree* t_p, bool handle_invisiref_parm_p)
 {
   struct cp_genericize_data wtd;
 
@@ -1457,6 +1527,7 @@ cp_genericize_tree (tree* t_p)
   wtd.omp_ctx = NULL;
   wtd.try_block = NULL_TREE;
   wtd.no_sanitize_p = false;
+  wtd.handle_invisiref_parm_p = handle_invisiref_parm_p;
   cp_walk_tree (t_p, cp_genericize_r, &wtd, NULL);
   delete wtd.p_set;
   wtd.bind_expr_stack.release ();
@@ -1507,14 +1578,11 @@ cp_ubsan_maybe_instrument_return (tree fndecl)
     }
   if (t == NULL_TREE)
     return;
-  t = DECL_SAVED_TREE (fndecl);
-  if (TREE_CODE (t) == BIND_EXPR
-      && TREE_CODE (BIND_EXPR_BODY (t)) == STATEMENT_LIST)
-    {
-      tree_stmt_iterator i = tsi_last (BIND_EXPR_BODY (t));
-      t = ubsan_instrument_return (DECL_SOURCE_LOCATION (fndecl));
-      tsi_link_after (&i, t, TSI_NEW_STMT);
-    }
+  tree *p = &DECL_SAVED_TREE (fndecl);
+  if (TREE_CODE (*p) == BIND_EXPR)
+    p = &BIND_EXPR_BODY (*p);
+  t = ubsan_instrument_return (DECL_SOURCE_LOCATION (fndecl));
+  append_to_statement_list (t, p);
 }
 
 void
@@ -1579,12 +1647,12 @@ cp_genericize (tree fndecl)
   /* Expand all the array notations here.  */
   if (flag_cilkplus 
       && contains_array_notation_expr (DECL_SAVED_TREE (fndecl)))
-    DECL_SAVED_TREE (fndecl) = 
-      expand_array_notation_exprs (DECL_SAVED_TREE (fndecl));
+    DECL_SAVED_TREE (fndecl)
+      = expand_array_notation_exprs (DECL_SAVED_TREE (fndecl));
 
   /* We do want to see every occurrence of the parms, so we can't just use
      walk_tree's hash functionality.  */
-  cp_genericize_tree (&DECL_SAVED_TREE (fndecl));
+  cp_genericize_tree (&DECL_SAVED_TREE (fndecl), true);
 
   if (flag_sanitize & SANITIZE_RETURN
       && do_ubsan_in_current_function ())
@@ -1900,6 +1968,12 @@ cxx_omp_disregard_value_expr (tree decl, bool shared)
 tree
 cp_fully_fold (tree x)
 {
+  if (processing_template_decl)
+    return x;
+  /* FIXME cp_fold ought to be a superset of maybe_constant_value so we don't
+     have to call both.  */
+  if (cxx_dialect >= cxx11)
+    x = maybe_constant_value (x);
   return cp_fold (x);
 }
 
@@ -1911,7 +1985,8 @@ cp_fold_maybe_rvalue (tree x, bool rval)
   while (true)
     {
       x = cp_fold (x);
-      if (rval && DECL_P (x))
+      if (rval && DECL_P (x)
+	  && TREE_CODE (TREE_TYPE (x)) != REFERENCE_TYPE)
 	{
 	  tree v = decl_constant_value (x);
 	  if (v != x && v != error_mark_node)
@@ -1993,12 +2068,21 @@ cp_fold (tree x)
   code = TREE_CODE (x);
   switch (code)
     {
+    case CLEANUP_POINT_EXPR:
+      /* Strip CLEANUP_POINT_EXPR if the expression doesn't have side
+	 effects.  */
+      r = cp_fold_rvalue (TREE_OPERAND (x, 0));
+      if (!TREE_SIDE_EFFECTS (r))
+	x = r;
+      break;
+
     case SIZEOF_EXPR:
       x = fold_sizeof_expr (x);
       break;
 
     case VIEW_CONVERT_EXPR:
       rval_ops = false;
+      /* FALLTHRU */
     case CONVERT_EXPR:
     case NOP_EXPR:
     case NON_LVALUE_EXPR:
@@ -2047,6 +2131,7 @@ cp_fold (tree x)
     case REALPART_EXPR:
     case IMAGPART_EXPR:
       rval_ops = false;
+      /* FALLTHRU */
     case CONJ_EXPR:
     case FIX_TRUNC_EXPR:
     case FLOAT_EXPR:
@@ -2099,6 +2184,7 @@ cp_fold (tree x)
     case COMPOUND_EXPR:
     case MODIFY_EXPR:
       rval_ops = false;
+      /* FALLTHRU */
     case POINTER_PLUS_EXPR:
     case PLUS_EXPR:
     case MINUS_EXPR:
@@ -2184,6 +2270,15 @@ cp_fold (tree x)
       op1 = cp_fold (TREE_OPERAND (x, 1));
       op2 = cp_fold (TREE_OPERAND (x, 2));
 
+      if (TREE_CODE (TREE_TYPE (x)) == BOOLEAN_TYPE)
+	{
+	  warning_sentinel s (warn_int_in_bool_context);
+	  if (!VOID_TYPE_P (TREE_TYPE (op1)))
+	    op1 = cp_truthvalue_conversion (op1);
+	  if (!VOID_TYPE_P (TREE_TYPE (op2)))
+	    op2 = cp_truthvalue_conversion (op2);
+	}
+
       if (op0 != TREE_OPERAND (x, 0)
 	  || op1 != TREE_OPERAND (x, 1)
 	  || op2 != TREE_OPERAND (x, 2))
@@ -2259,11 +2354,18 @@ cp_fold (tree x)
 	   constant, but the call followed by an INDIRECT_REF is.  */
 	if (callee && DECL_DECLARED_CONSTEXPR_P (callee)
 	    && !flag_no_inline)
-          r = maybe_constant_value (x);
+	  r = maybe_constant_value (x);
 	optimize = sv;
 
         if (TREE_CODE (r) != CALL_EXPR)
 	  {
+	    if (DECL_CONSTRUCTOR_P (callee))
+	      {
+		loc = EXPR_LOCATION (x);
+		tree s = build_fold_indirect_ref_loc (loc,
+						      CALL_EXPR_ARG (x, 0));
+		r = build2_loc (loc, INIT_EXPR, TREE_TYPE (s), s, r);
+	      }
 	    x = r;
 	    break;
 	  }
@@ -2277,30 +2379,26 @@ cp_fold (tree x)
       {
 	unsigned i;
 	constructor_elt *p;
-	bool changed = false;
 	vec<constructor_elt, va_gc> *elts = CONSTRUCTOR_ELTS (x);
 	vec<constructor_elt, va_gc> *nelts = NULL;
-	vec_safe_reserve (nelts, vec_safe_length (elts));
 	FOR_EACH_VEC_SAFE_ELT (elts, i, p)
 	  {
 	    tree op = cp_fold (p->value);
-	    constructor_elt e = { p->index, op };
-	    nelts->quick_push (e);
 	    if (op != p->value)
 	      {
 		if (op == error_mark_node)
 		  {
 		    x = error_mark_node;
-		    changed = false;
+		    vec_free (nelts);
 		    break;
 		  }
-		changed = true;
+		if (nelts == NULL)
+		  nelts = elts->copy ();
+		(*nelts)[i].value = op;
 	      }
 	  }
-	if (changed)
+	if (nelts)
 	  x = build_constructor (TREE_TYPE (x), nelts);
-	else
-	  vec_free (nelts);
 	break;
       }
     case TREE_VEC:

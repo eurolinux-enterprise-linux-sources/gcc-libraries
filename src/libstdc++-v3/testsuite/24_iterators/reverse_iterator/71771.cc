@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Free Software Foundation, Inc.
+// Copyright (C) 2016-2017 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -39,5 +39,7 @@ test01()
   int i[2];
   __gnu_test::test_container<int, __gnu_test::bidirectional_iterator_wrapper>
     c(i);
-  diff2(std::rbegin(c), std::rend(c));
+  using reverse_iterator
+    = std::reverse_iterator<__gnu_test::bidirectional_iterator_wrapper<int>>;
+  diff2(reverse_iterator(c.end()), reverse_iterator(c.begin()));
 }

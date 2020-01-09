@@ -1,6 +1,6 @@
 /* Breadth-first and depth-first routines for
    searching multiple-inheritance lattice for GNU C++.
-   Copyright (C) 1987-2016 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -27,7 +27,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cp-tree.h"
 #include "intl.h"
 #include "toplev.h"
-#include "spellcheck.h"
+#include "spellcheck-tree.h"
 
 static int is_subobject_of_p (tree, tree);
 static tree dfs_lookup_base (tree, void *);
@@ -782,6 +782,9 @@ friend_accessible_p (tree scope, tree decl, tree type, tree otype)
   if (!scope)
     return 0;
 
+  if (is_global_friend (scope))
+    return 1;
+
   /* Is SCOPE itself a suitable P?  */
   if (TYPE_P (scope) && protected_accessible_p (decl, scope, type, otype))
     return 1;
@@ -1107,6 +1110,14 @@ lookup_field_r (tree binfo, void *data)
   if (!nval)
     /* Look for a data member or type.  */
     nval = lookup_field_1 (type, lfi->name, lfi->want_type);
+  else if (TREE_CODE (nval) == OVERLOAD && OVL_USED (nval))
+    {
+      /* If we have both dependent and non-dependent using-declarations, return
+	 the dependent one rather than an incomplete list of functions.  */
+      tree dep_using = lookup_field_1 (type, lfi->name, lfi->want_type);
+      if (dep_using && TREE_CODE (dep_using) == USING_DECL)
+	nval = dep_using;
+    }
 
   /* If there is no declaration with the indicated name in this type,
      then there's nothing to do.  */
@@ -1391,13 +1402,7 @@ lookup_field_fuzzy_info::fuzzy_lookup_fnfields (tree type)
 void
 lookup_field_fuzzy_info::fuzzy_lookup_field (tree type)
 {
-  if (TREE_CODE (type) == TEMPLATE_TYPE_PARM
-      || TREE_CODE (type) == BOUND_TEMPLATE_TEMPLATE_PARM
-      || TREE_CODE (type) == TYPENAME_TYPE)
-    /* The TYPE_FIELDS of a TEMPLATE_TYPE_PARM and
-       BOUND_TEMPLATE_TEMPLATE_PARM are not fields at all;
-       instead TYPE_FIELDS is the TEMPLATE_PARM_INDEX.
-       The TYPE_FIELDS of TYPENAME_TYPE is its TYPENAME_TYPE_FULLNAME.  */
+  if (!CLASS_TYPE_P (type))
     return;
 
   for (tree field = TYPE_FIELDS (type); field; field = DECL_CHAIN (field))
@@ -1662,7 +1667,7 @@ lookup_fnfields_1 (tree type, tree name)
 	  if (CLASSTYPE_LAZY_MOVE_CTOR (type))
 	    lazily_declare_fn (sfk_move_constructor, type);
 	}
-      else if (name == ansi_assopname (NOP_EXPR))
+      else if (name == cp_assignment_operator_id (NOP_EXPR))
 	{
 	  if (CLASSTYPE_LAZY_COPY_ASSIGN (type))
 	    lazily_declare_fn (sfk_copy_assignment, type);
@@ -2845,3 +2850,21 @@ original_binfo (tree binfo, tree here)
   return result;
 }
 
+/* True iff TYPE has any dependent bases (and therefore we can't say
+   definitively that another class is not a base of an instantiation of
+   TYPE).  */
+
+bool
+any_dependent_bases_p (tree type)
+{
+  if (!type || !CLASS_TYPE_P (type) || !processing_template_decl)
+    return false;
+
+  unsigned i;
+  tree base_binfo;
+  FOR_EACH_VEC_SAFE_ELT (BINFO_BASE_BINFOS (TYPE_BINFO (type)), i, base_binfo)
+    if (BINFO_DEPENDENT_BASE_P (base_binfo))
+      return true;
+
+  return false;
+}
