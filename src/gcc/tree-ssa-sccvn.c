@@ -2035,7 +2035,9 @@ vn_reference_lookup_3 (ao_ref *ref, tree vuse, void *vr_,
 	  ops[1] = bitsize_int (ref->size);
 	  ops[2] = bitsize_int (offset - offset2);
 	  tree val = vn_nary_build_or_lookup (rcode, vr->type, ops);
-	  if (val)
+	  if (val
+	      && (TREE_CODE (val) != SSA_NAME
+		  || ! SSA_NAME_OCCURS_IN_ABNORMAL_PHI (val)))
 	    {
 	      vn_reference_t res = vn_reference_lookup_or_insert_for_pieces
 		  (vuse, vr->set, vr->type, vr->operands, val);
@@ -2302,7 +2304,7 @@ vn_reference_lookup_3 (ao_ref *ref, tree vuse, void *vr_,
       memset (&op, 0, sizeof (op));
       op.type = vr->type;
       op.opcode = MEM_REF;
-      op.op0 = build_int_cst (ptr_type_node, at - rhs_offset);
+      op.op0 = build_int_cst (ptr_type_node, at - lhs_offset + rhs_offset);
       op.off = at - lhs_offset + rhs_offset;
       vr->operands[0] = op;
       op.type = TREE_TYPE (rhs);

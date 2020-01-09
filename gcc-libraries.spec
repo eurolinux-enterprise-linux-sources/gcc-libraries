@@ -1,10 +1,10 @@
-%global DATE 20170526
-%global SVNREV 248505
-%global gcc_version 7.1.1
+%global DATE 20170829
+%global SVNREV 251415
+%global gcc_version 7.2.1
 %global gcc_major 7
 # Note, gcc_release must be integer, if you want to add suffixes to
 # %{release}, append them after %{gcc_release} on Release: line.
-%global gcc_release 2
+%global gcc_release 1
 %global mpc_version 0.8.1
 %global _unpackaged_files_terminate_build 0
 %global multilib_64_archs sparc64 ppc64 s390x x86_64
@@ -63,14 +63,14 @@ Provides: libquadmath
 Obsoletes: libitm
 
 Version: %{gcc_version}
-Release: %{gcc_release}.4.1%{?dist}
+Release: %{gcc_release}.2.1%{?dist}
 # libgcc, libgfortran, libmudflap, libgomp, libstdc++ and crtstuff have
 # GCC Runtime Exception.
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
 Group: System Environment/Libraries
 # The source for this package was pulled from upstream's vcs.  Use the
 # following commands to generate the tarball:
-# svn export svn://gcc.gnu.org/svn/gcc/branches/redhat/gcc-5-branch@%{SVNREV} gcc-%{version}-%{DATE}
+# svn export svn://gcc.gnu.org/svn/gcc/branches/redhat/gcc-7-branch@%{SVNREV} gcc-%{version}-%{DATE}
 # tar cf - gcc-%{version}-%{DATE} | bzip2 -9 > gcc-%{version}-%{DATE}.tar.bz2
 Source0: gcc-%{version}-%{DATE}.tar.bz2
 Source1: http://www.multiprecision.org/mpc/download/mpc-%{mpc_version}.tar.gz
@@ -187,7 +187,6 @@ Patch8: gcc7-no-add-needed.patch
 Patch9: gcc7-aarch64-async-unw-tables.patch
 Patch10: gcc7-foffload-default.patch
 Patch11: gcc7-Wno-format-security.patch
-Patch12: gcc7-pr80725.patch
 
 Patch1002: gcc7-alt-compat-test.patch
 Patch1005: gcc7-rh1118870.patch
@@ -217,7 +216,7 @@ Patch2001: 0022-Default-values-for-certain-field-descriptors-in-form.patch
 
 %description
 This package contains various GCC runtime libraries, such as libatomic,
-libcilkrts, libgfortran, or libitm.
+or libitm.
 
 %package -n libitm
 Summary: The GNU Transactional Memory library
@@ -303,7 +302,6 @@ for __float128 math support and for Fortran REAL*16 support.
 %patch9 -p0 -b .aarch64-async-unw-tables~
 %patch10 -p0 -b .foffload-default~
 %patch11 -p0 -b .Wno-format-security~
-%patch12 -p0 -b .pr80725~
 
 sed -i -e 's/ -Wl,-z,nodlopen//g' gcc/ada/gcc-interface/Makefile.in
 
@@ -726,8 +724,11 @@ fi
 %doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/gfortran/*
 
 %changelog
-* Tue Apr  3 2018 Marek Polacek <polacek@redhat.com> 7.1.1-2.4.1
-- Add support for DEC formatting extensions (#1563082)
+* Fri Mar 30 2018 Jeff Law <law@redhat.com> 7.2.1-1.2.1
+- Add support for DEC formatting extensions (#1554429)
+
+* Wed Jan 10 2018 Marek Polacek <polacek@redhat.com> 7.2.1-1.1.1
+- update from gcc-7.2.1-1 (#1465568)
 
 * Tue Jul  4 2017 Marek Polacek <polacek@redhat.com> 7.1.1-2.3.1
 - ship libquadmath on RHEL6
