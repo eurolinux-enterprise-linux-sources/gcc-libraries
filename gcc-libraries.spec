@@ -877,26 +877,11 @@ fi
 * Mon Aug 27 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.3.1
 - update 0022-Default-values-for-certain-field-descriptors-in-form.patch
 
-* Fri Jul 27 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.2.1
-- add %preun for libgfortran4
+* Thu Aug  2 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.2.1
+- update from rhel-7.6 branch
 
-* Fri Jul 27 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.1.1
-- update from gcc-8.2.1-1
-
-* Wed Jul 25 2018 Marek Polacek <polacek@redhat.com> 8.1.1-5.2.1
-- also package libgfortran4 (#1600265)
-
-* Tue Jul 10 2018 Marek Polacek <polacek@redhat.com> 8.1.1-5.1.1
-- update from gcc-8.1.1-5
-
-* Tue Jul 10 2018 Marek Polacek <polacek@redhat.com> 8.1.1-4.1.1
-- update from gcc-8.1.1-4
-
-* Wed Jun 13 2018 Marek Polacek <polacek@redhat.com> 7.3.1-5.1.1
-- update from devtoolset-7-gcc-7.3.1-5.10
-
-* Tue Apr  3 2018 Marek Polacek <polacek@redhat.com> 7.2.1-1.2.1
-- Add support for DEC formatting extensions (#1554430)
+* Thu Apr  5 2018 Marek Polacek <polacek@redhat.com> 7.2.1-1.2.1
+- Add support for DEC formatting extensions (#1564043)
 
 * Thu Oct 19 2017 Marek Polacek <polacek@redhat.com> 7.2.1-1.1.1
 - update from gcc-7.2.1-1 (#1477224)
