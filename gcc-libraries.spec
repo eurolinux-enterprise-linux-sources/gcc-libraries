@@ -1,12 +1,12 @@
-%global DATE 20180726
+%global DATE 20190223
 %global DATE7 20180303
-%global SVNREV 263019
-%global gcc_version 8.2.1
+%global SVNREV 269162
+%global gcc_version 8.3.1
 %global gcc7_version 7.3.1
 %global gcc_major 8
 # Note, gcc_release must be integer, if you want to add suffixes to
 # %%{release}, append them after %%{gcc_release} on Release: line.
-%global gcc_release 1
+%global gcc_release 2
 %global mpc_version 0.8.1
 %global _unpackaged_files_terminate_build 0
 %global multilib_64_archs sparc64 ppc64 ppc64p7 s390x x86_64
@@ -116,7 +116,7 @@ Provides: libquadmath
 %endif
 Obsoletes: libitm
 Version: %{gcc_version}
-Release: %{gcc_release}.3.1%{?dist}
+Release: %{gcc_release}.1.1%{?dist}
 # libgcc, libgfortran, libgomp, libstdc++ and crtstuff have
 # GCC Runtime Exception.
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
@@ -874,14 +874,32 @@ fi
 %endif
 
 %changelog
+* Mon Feb 25 2019 Marek Polacek <polacek@redhat.com> 8.3.1-2.1.1
+- update from Fedora 8.3.1-2 gcc (#1551629)
+
 * Mon Aug 27 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.3.1
 - update 0022-Default-values-for-certain-field-descriptors-in-form.patch
 
-* Thu Aug  2 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.2.1
-- update from rhel-7.6 branch
+* Fri Jul 27 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.2.1
+- add %preun for libgfortran4
 
-* Thu Apr  5 2018 Marek Polacek <polacek@redhat.com> 7.2.1-1.2.1
-- Add support for DEC formatting extensions (#1564043)
+* Fri Jul 27 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.1.1
+- update from gcc-8.2.1-1
+
+* Wed Jul 25 2018 Marek Polacek <polacek@redhat.com> 8.1.1-5.2.1
+- also package libgfortran4 (#1600265)
+
+* Tue Jul 10 2018 Marek Polacek <polacek@redhat.com> 8.1.1-5.1.1
+- update from gcc-8.1.1-5
+
+* Tue Jul 10 2018 Marek Polacek <polacek@redhat.com> 8.1.1-4.1.1
+- update from gcc-8.1.1-4
+
+* Wed Jun 13 2018 Marek Polacek <polacek@redhat.com> 7.3.1-5.1.1
+- update from devtoolset-7-gcc-7.3.1-5.10
+
+* Tue Apr  3 2018 Marek Polacek <polacek@redhat.com> 7.2.1-1.2.1
+- Add support for DEC formatting extensions (#1554430)
 
 * Thu Oct 19 2017 Marek Polacek <polacek@redhat.com> 7.2.1-1.1.1
 - update from gcc-7.2.1-1 (#1477224)
