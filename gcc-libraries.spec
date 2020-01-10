@@ -1,34 +1,74 @@
-%global DATE 20170829
-%global SVNREV 251415
-%global gcc_version 7.2.1
-%global gcc_major 7
+%global DATE 20180726
+%global DATE7 20180303
+%global SVNREV 263019
+%global gcc_version 8.2.1
+%global gcc7_version 7.3.1
+%global gcc_major 8
 # Note, gcc_release must be integer, if you want to add suffixes to
-# %{release}, append them after %{gcc_release} on Release: line.
+# %%{release}, append them after %%{gcc_release} on Release: line.
 %global gcc_release 1
 %global mpc_version 0.8.1
 %global _unpackaged_files_terminate_build 0
-%global multilib_64_archs sparc64 ppc64 s390x x86_64
-%ifarch s390x
-%global multilib_32_arch s390
+%global multilib_64_archs sparc64 ppc64 ppc64p7 s390x x86_64
+%ifarch %{ix86} x86_64 ia64 ppc %{power64} alpha s390x %{arm} aarch64
+%global build_ada 0
+%else
+%global build_ada 0
 %endif
-%ifarch sparc64
-%global multilib_32_arch sparcv9
+%global build_objc 0
+%ifarch %{ix86} x86_64 ppc ppc64 ppc64le ppc64p7 s390 s390x %{arm} aarch64 %{mips}
+%global build_go 0
+%else
+%global build_go 0
 %endif
-%ifarch ppc64
-%global multilib_32_arch ppc
-%endif
-%ifarch x86_64
-%global multilib_32_arch i686
-%endif
-%ifarch %{ix86} x86_64 ia64
+%if 0%{?rhel} == 7
+%ifarch %{ix86} x86_64 ia64 ppc ppc64 ppc64le
 %global build_libquadmath 1
 %else
 %global build_libquadmath 0
 %endif
-%ifarch %{ix86} x86_64
-%global build_libcilkrts 1
+%endif
+%if 0%{?rhel} == 6
+%ifarch %{ix86} x86_64 ia64 ppc64le
+%global build_libquadmath 1
 %else
-%global build_libcilkrts 0
+%global build_libquadmath 0
+%endif
+%endif
+%if 0%{?rhel} == 7
+# libquadmath is present via system gcc on x86_64 and i686.
+%ifarch ppc ppc64 ppc64le
+%global package_libquadmath 1
+%else
+%global package_libquadmath 0
+%endif
+%endif
+%if 0%{?rhel} == 6
+%ifarch %{ix86} x86_64 ppc64le
+%global package_libquadmath 1
+%else
+%global package_libquadmath 0
+%endif
+%endif
+%ifarch %{ix86} x86_64 ppc ppc64 ppc64le ppc64p7 s390 s390x %{arm} aarch64
+%global build_libasan 0
+%else
+%global build_libasan 0
+%endif
+%ifarch x86_64 ppc64 ppc64le aarch64
+%global build_libtsan 0
+%else
+%global build_libtsan 0
+%endif
+%ifarch x86_64 ppc64 ppc64le aarch64
+%global build_liblsan 0
+%else
+%global build_liblsan 0
+%endif
+%ifarch %{ix86} x86_64 ppc ppc64 ppc64le ppc64p7 s390 s390x %{arm} aarch64
+%global build_libubsan 0
+%else
+%global build_libubsan 0
 %endif
 %ifarch aarch64
 %if 0%{?rhel} >= 7
@@ -49,30 +89,46 @@
 %else
 %global build_libitm 1
 %endif
+%global build_isl 0
+%global build_libstdcxx_docs 0
 %ifarch %{ix86} x86_64 ppc ppc64 ppc64le ppc64p7 s390 s390x %{arm} aarch64 %{mips}
 %global attr_ifunc 1
 %else
 %global attr_ifunc 0
 %endif
+%ifarch s390x
+%global multilib_32_arch s390
+%endif
+%ifarch sparc64
+%global multilib_32_arch sparcv9
+%endif
+%ifarch ppc64 ppc64p7
+%global multilib_32_arch ppc
+%endif
+%ifarch x86_64
+%global multilib_32_arch i686
+%endif
 Summary: GCC runtime libraries
 Name: gcc-libraries
-Provides: libatomic libitm libcilkrts libgfortran4
+Provides: libatomic libitm libgfortran4 libgfortran5
+%if %{package_libquadmath}
+Provides: libquadmath
+%endif
 Obsoletes: libitm
-
 Version: %{gcc_version}
-Release: %{gcc_release}.2.1%{?dist}
-# libgcc, libgfortran, libmudflap, libgomp, libstdc++ and crtstuff have
+Release: %{gcc_release}.3.1%{?dist}
+# libgcc, libgfortran, libgomp, libstdc++ and crtstuff have
 # GCC Runtime Exception.
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ with exceptions and LGPLv2+ and BSD
 Group: System Environment/Libraries
 # The source for this package was pulled from upstream's vcs.  Use the
 # following commands to generate the tarball:
-# svn export svn://gcc.gnu.org/svn/gcc/branches/redhat/gcc-7-branch@%{SVNREV} gcc-%{version}-%{DATE}
-# tar cf - gcc-%{version}-%{DATE} | bzip2 -9 > gcc-%{version}-%{DATE}.tar.bz2
-Source0: gcc-%{version}-%{DATE}.tar.bz2
+# svn export svn://gcc.gnu.org/svn/gcc/branches/redhat/gcc-8-branch@%%{SVNREV} gcc-%%{version}-%%{DATE}
+# tar cf - gcc-%%{version}-%%{DATE} | xz -9e > gcc-%%{version}-%%{DATE}.tar.xz
+Source0: gcc-%{version}-%{DATE}.tar.xz
 Source1: http://www.multiprecision.org/mpc/download/mpc-%{mpc_version}.tar.gz
+Source2: gcc-%{gcc7_version}-%{DATE7}.tar.bz2
 URL: http://gcc.gnu.org
-BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 # Need binutils with -pie support >= 2.14.90.0.4-4
 # Need binutils which can omit dot symbols and overlap .opd on ppc64 >= 2.15.91.0.2-4
 # Need binutils which handle -msecure-plt on ppc >= 2.16.91.0.2-2
@@ -80,16 +136,15 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 # Need binutils which support --hash-style=gnu >= 2.17.50.0.2-7
 # Need binutils which support mffgpr and mftgpr >= 2.17.50.0.2-8
 # Need binutils which support --build-id >= 2.17.50.0.17-3
-# Need binutils which support %gnu_unique_object >= 2.19.51.0.14
+# Need binutils which support %%gnu_unique_object >= 2.19.51.0.14
 # Need binutils which support .cfi_sections >= 2.19.51.0.14-33
-# Need binutils which support --no-add-needed >= 2.20.51.0.2-12
-# Need binutils which support -plugin
-BuildRequires: binutils >= 2.24
+BuildRequires: binutils >= 2.19.51.0.14-33
 # While gcc doesn't include statically linked binaries, during testing
 # -static is used several times.
 BuildRequires: glibc-static
-BuildRequires: zlib-devel, gettext, dejagnu, bison, flex, texinfo, sharutils
-BuildRequires: /usr/bin/pod2man
+BuildRequires: zlib-devel, gettext, dejagnu, bison, flex, sharutils
+BuildRequires: texinfo, /usr/bin/pod2man
+BuildRequires: gcc, gcc-c++, gcc-gfortran
 %if 0%{?rhel} >= 7
 BuildRequires: texinfo-tex
 %endif
@@ -122,11 +177,9 @@ BuildRequires: libunwind >= 0.98
 # Need binutils that supports --hash-style=gnu
 # Need binutils that support mffgpr/mftgpr
 # Need binutils that support --build-id
-# Need binutils that support %gnu_unique_object
+# Need binutils that support %%gnu_unique_object
 # Need binutils that support .cfi_sections
-# Need binutils that support --no-add-needed
-# Need binutils that support -plugin
-Requires: binutils >= 2.24
+Requires: binutils >= 2.19.51.0.14-33
 # Make sure gdb will understand DW_FORM_strp
 Conflicts: gdb < 5.1-2
 Requires: glibc-devel >= 2.2.90-12
@@ -175,43 +228,61 @@ ExclusiveArch: %{ix86} x86_64 ppc ppc64 ppc64le s390 s390x aarch64
 %ifarch ppc64le
 %global oformat OUTPUT_FORMAT(elf64-powerpcle)
 %endif
+%ifarch aarch64
+%global oformat OUTPUT_FORMAT(elf64-littleaarch64)
+%endif
 
-Patch0: gcc7-hack.patch
-Patch1: gcc7-ppc32-retaddr.patch
-Patch2: gcc7-i386-libgomp.patch
-Patch3: gcc7-sparc-config-detection.patch
-Patch4: gcc7-libgomp-omp_h-multilib.patch
-Patch5: gcc7-libtool-no-rpath.patch
-Patch6: gcc7-isl-dl.patch
-Patch7: gcc7-libstdc++-docs.patch
-Patch8: gcc7-no-add-needed.patch
-Patch9: gcc7-aarch64-async-unw-tables.patch
-Patch10: gcc7-foffload-default.patch
-Patch11: gcc7-Wno-format-security.patch
+Patch0: gcc8-hack.patch
+Patch2: gcc8-i386-libgomp.patch
+Patch3: gcc8-sparc-config-detection.patch
+Patch4: gcc8-libgomp-omp_h-multilib.patch
+Patch5: gcc8-libtool-no-rpath.patch
+Patch8: gcc8-no-add-needed.patch
+Patch9: gcc8-foffload-default.patch
+Patch10: gcc8-Wno-format-security.patch
+Patch11: gcc8-rh1512529-aarch64.patch
+Patch12: gcc8-mcet.patch
 
-Patch1002: gcc7-alt-compat-test.patch
-Patch1005: gcc7-rh1118870.patch
-Patch1100: gcc7-htm-in-asm.patch
+Patch1001: gcc8-alt-compat-test.patch
+Patch1003: gcc8-rh1118870.patch
+Patch1100: gcc8-htm-in-asm.patch
 
 # Support for more DEC extensions in libgfortran runtime
 # BZ1554429
-Patch2000: 0000-infrastructure.patch
 Patch2001: 0022-Default-values-for-certain-field-descriptors-in-form.patch
 
-%if 0%{?rhel} >= 7
-%global nonsharedver 48
-%else
-%global nonsharedver 44
-%endif
+# We'll be building GCC 7 in order to ship libgfortran4.
+Patch7000: gcc7-hack.patch
+Patch7002: gcc7-i386-libgomp.patch
+Patch7003: gcc7-sparc-config-detection.patch
+Patch7004: gcc7-libgomp-omp_h-multilib.patch
+Patch7005: gcc7-libtool-no-rpath.patch
+Patch7006: gcc7-isl-dl.patch
+Patch7008: gcc7-no-add-needed.patch
+Patch7009: gcc7-aarch64-async-unw-tables.patch
+Patch7010: gcc7-foffload-default.patch
+Patch7011: gcc7-Wno-format-security.patch
+Patch7013: gcc7-rh1512529-aarch64.patch
+Patch7014: gcc7-pr84524.patch
+Patch7015: gcc7-pr84128.patch
+Patch7016: gcc7-rh1570967.patch
+Patch7102: gcc7-alt-compat-test.patch
+Patch7105: gcc7-rh1118870.patch
+Patch7100: gcc7-htm-in-asm.patch
+
+# Support for more DEC extensions in libgfortran runtime
+# BZ1554429
+Patch7200: gcc7-0000-infrastructure.patch
+Patch7201: gcc7-0022-Default-values-for-certain-field-descriptors-in-form.patch
 
 %global _gnu %{nil}
 %ifarch sparcv9
 %global gcc_target_platform sparc64-%{_vendor}-%{_target_os}%{?_gnu}
 %endif
-%ifarch ppc
+%ifarch ppc ppc64p7
 %global gcc_target_platform ppc64-%{_vendor}-%{_target_os}%{?_gnu}
 %endif
-%ifnarch sparcv9 ppc
+%ifnarch sparcv9 ppc ppc64p7
 %global gcc_target_platform %{_target_platform}
 %endif
 
@@ -240,71 +311,68 @@ This package contains the GNU Atomic library
 which is a GCC support runtime library for atomic operations not supported
 by hardware.
 
-%package -n libcilkrts
-Summary: The Cilk+ runtime library
-Group: System Environment/Libraries
-Requires(post): /sbin/install-info
-Requires(preun): /sbin/install-info
-
-%description -n libcilkrts
-This package contains the Cilk+ runtime library.
-
-%package -n libmpx
-Summary: The Memory Protection Extensions runtime libraries
-Group: System Environment/Libraries
-Requires(post): /sbin/install-info
-Requires(preun): /sbin/install-info
-
-%description -n libmpx
-This package contains the Memory Protection Extensions runtime libraries
-which is used for -fcheck-pointer-bounds -mmpx instrumented programs.
-
 %package -n libgfortran4
-Summary: Fortran runtime
+Summary: Fortran runtime v4
 Group: System Environment/Libraries
 Autoreq: true
 %if %{build_libquadmath}
 Requires: libquadmath
 %endif
-%if "%{version}" != "%{gcc_version}"
-Provides: libgfortran = %{gcc_provides}
-%endif
 
 %description -n libgfortran4
-This package contains Fortran shared library which is needed to run
+This package contains Fortran shared library v4 which is needed to run
 Fortran dynamically linked programs.
 
+%package -n libgfortran5
+Summary: Fortran runtime v5
+Group: System Environment/Libraries
+Autoreq: true
+%if %{build_libquadmath}
+Requires: libquadmath
+%endif
+
+%description -n libgfortran5
+This package contains Fortran shared library v5 which is needed to run
+Fortran dynamically linked programs.
+
+%package -n libquadmath
+Summary: GCC __float128 shared support library
+Group: System Environment/Libraries
+Requires(post): /sbin/install-info
+Requires(preun): /sbin/install-info
+
+%description -n libquadmath
+This package contains GCC shared support library which is needed
+for __float128 math support and for Fortran REAL*16 support.
+
 %prep
+# Also unpack GCC 7 sources.
 %if 0%{?rhel} >= 7
-%setup -q -n gcc-%{version}-%{DATE}
+%setup -q -n gcc-%{version}-%{DATE} -a 2
 %else
-%setup -q -n gcc-%{version}-%{DATE} -a 1
+%setup -q -n gcc-%{version}-%{DATE} -a 1 -a 2
 %endif
 %patch0 -p0 -b .hack~
-%patch1 -p0 -b .ppc32-retaddr~
 %patch2 -p0 -b .i386-libgomp~
 %patch3 -p0 -b .sparc-config-detection~
 %patch4 -p0 -b .libgomp-omp_h-multilib~
 %patch5 -p0 -b .libtool-no-rpath~
 %patch8 -p0 -b .no-add-needed~
-%patch9 -p0 -b .aarch64-async-unw-tables~
-%patch10 -p0 -b .foffload-default~
-%patch11 -p0 -b .Wno-format-security~
-
-sed -i -e 's/ -Wl,-z,nodlopen//g' gcc/ada/gcc-interface/Makefile.in
+%patch9 -p0 -b .foffload-default~
+%patch10 -p0 -b .Wno-format-security~
+%patch11 -p0 -b .rh1512529-aarch64~
 
 %ifarch %{ix86} x86_64
 %if 0%{?rhel} < 7
 # On i?86/x86_64 there are some incompatibilities in _Decimal* as well as
 # aggregates containing larger vector passing.
-%patch1002 -p0 -b .alt-compat-test~
+%patch1001 -p0 -b .alt-compat-test~
 %endif
 %endif
 
-%patch1005 -p0 -b .rh1118870~
-%patch1100 -p0 -b .gcc6-htm-in-asm~
+%patch1003 -p0 -b .rh1118870~
+%patch1100 -p0 -b .gcc8-htm-in-asm~
 
-%patch2000 -p1 -b .dec-extensions~
 %patch2001 -p1 -b .dec-extensions-2~
 
 %if 0%{?rhel} == 6
@@ -315,6 +383,7 @@ sed -i 's/\(may be either 2, 3 or 4; the default version is \)4\./\13./' gcc/doc
 
 cp -a libstdc++-v3/config/cpu/i{4,3}86/atomicity.h
 cp -a libstdc++-v3/config/cpu/i{4,3}86/opt
+echo 'TM_H += $(srcdir)/config/rs6000/rs6000-modes.h' >> gcc/config/rs6000/t-rs6000
 
 ./contrib/gcc_update --touch
 
@@ -330,6 +399,51 @@ if [ -d libstdc++-v3/config/abi/post/powerpc64-linux-gnu ]; then
   rm -rf libstdc++-v3/config/abi/post/powerpc64-linux-gnu/32
 fi
 %endif
+%ifarch sparc
+if [ -d libstdc++-v3/config/abi/post/sparc64-linux-gnu ]; then
+  mkdir -p libstdc++-v3/config/abi/post/sparc64-linux-gnu/64
+  mv libstdc++-v3/config/abi/post/sparc64-linux-gnu/{,64/}baseline_symbols.txt
+  mv libstdc++-v3/config/abi/post/sparc64-linux-gnu/{32/,}baseline_symbols.txt
+  rm -rf libstdc++-v3/config/abi/post/sparc64-linux-gnu/32
+fi
+%endif
+
+# This test causes fork failures, because it spawns way too many threads
+rm -f gcc/testsuite/go.test/test/chan/goroutines.go
+
+# Apply GCC 7 patches.
+pushd gcc-%{gcc7_version}-%{DATE7}
+%patch7000 -p0 -b .hack~
+%patch7002 -p0 -b .i386-libgomp~
+%patch7003 -p0 -b .sparc-config-detection~
+%patch7004 -p0 -b .libgomp-omp_h-multilib~
+%patch7005 -p0 -b .libtool-no-rpath~
+%patch7008 -p0 -b .no-add-needed~
+%patch7009 -p0 -b .aarch64-async-unw-tables~
+%patch7010 -p0 -b .foffload-default~
+%patch7011 -p0 -b .Wno-format-security~
+%patch7013 -p0 -b .rh1512529-aarch64~
+%patch7014 -p0 -b .pr84524~
+%patch7015 -p0 -b .pr84128~
+%patch7016 -p0 -b .rh1570967~
+
+sed -i -e 's/ -Wl,-z,nodlopen//g' gcc/ada/gcc-interface/Makefile.in
+
+%ifarch %{ix86} x86_64
+%if 0%{?rhel} < 7
+# On i?86/x86_64 there are some incompatibilities in _Decimal* as well as
+# aggregates containing larger vector passing.
+%patch7102 -p0 -b .alt-compat-test~
+%endif
+%endif
+
+%patch7105 -p0 -b .rh1118870~
+%patch7100 -p0 -b .gcc7-htm-in-asm~
+
+%patch7200 -p1 -b .dec-extensions~
+%patch7201 -p1 -b .dec-extensions-2~
+popd
+
 %build
 
 # Undo the broken autoconf change in recent Fedora versions
@@ -357,69 +471,41 @@ OPT_FLAGS=`echo %{optflags}|sed -e 's/\(-Wp,\)\?-D_FORTIFY_SOURCE=[12]//g'`
 OPT_FLAGS=`echo $OPT_FLAGS|sed -e 's/-m64//g;s/-m32//g;s/-m31//g'`
 OPT_FLAGS=`echo $OPT_FLAGS|sed -e 's/-mfpmath=sse/-mfpmath=sse -msse2/g'`
 OPT_FLAGS=`echo $OPT_FLAGS|sed -e 's/ -pipe / /g'`
+OPT_FLAGS=`echo $OPT_FLAGS|sed -e 's/-Werror=format-security/-Wformat-security/g'`
 %ifarch sparc
 OPT_FLAGS=`echo $OPT_FLAGS|sed -e 's/-mcpu=ultrasparc/-mtune=ultrasparc/g;s/-mcpu=v[78]//g'`
 %endif
 %ifarch %{ix86}
 OPT_FLAGS=`echo $OPT_FLAGS|sed -e 's/-march=i.86//g'`
 %endif
-%ifarch sparc64
-cat > gcc64 <<"EOF"
-#!/bin/sh
-exec /usr/bin/gcc -m64 "$@"
-EOF
-chmod +x gcc64
-CC=`pwd`/gcc64
-cat > g++64 <<"EOF"
-#!/bin/sh
-exec /usr/bin/g++ -m64 "$@"
-EOF
-chmod +x g++64
-CXX=`pwd`/g++64
-%endif
-%ifarch ppc64 ppc64le ppc64p7
-if gcc -m64 -xc -S /dev/null -o - > /dev/null 2>&1; then
-  cat > gcc64 <<"EOF"
-#!/bin/sh
-exec /usr/bin/gcc -m64 "$@"
-EOF
-  chmod +x gcc64
-  CC=`pwd`/gcc64
-  cat > g++64 <<"EOF"
-#!/bin/sh
-exec /usr/bin/g++ -m64 "$@"
-EOF
-  chmod +x g++64
-  CXX=`pwd`/g++64
-fi
-%endif
 OPT_FLAGS=`echo "$OPT_FLAGS" | sed -e 's/[[:blank:]]\+/ /g'`
-CC="$CC" CXX="$CXX" CFLAGS="$OPT_FLAGS" \
-	CXXFLAGS="`echo " $OPT_FLAGS " | sed 's/ -Wall / /g;s/ -fexceptions / /g'`" \
-	XCFLAGS="$OPT_FLAGS" TCFLAGS="$OPT_FLAGS" \
-	GCJFLAGS="$OPT_FLAGS" \
-	../configure --prefix=%{_prefix} --mandir=%{_mandir} --infodir=%{_infodir} \
-	--with-bugurl=http://bugzilla.redhat.com/bugzilla --enable-bootstrap \
+CONFIGURE_OPTS="\
+	--prefix=%{_prefix} --mandir=%{_mandir} --infodir=%{_infodir} \
+	--with-bugurl=http://bugzilla.redhat.com/bugzilla \
 	--enable-shared --enable-threads=posix --enable-checking=release \
-	--enable-multilib --disable-libsanitizer \
-	--with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions \
-	--enable-gnu-unique-object \
-	--enable-linker-build-id \
-	--enable-languages=c,c++,lto,fortran \
-	--enable-plugin --with-linker-hash-style=gnu \
-%if 0%{?rhel} >= 7
-	--enable-initfini-array \
+%ifarch ppc64le
+	--enable-targets=powerpcle-linux \
+%endif
+%ifarch ppc64le %{mips} riscv64
+	--disable-multilib \
 %else
-	--disable-initfini-array \
+	--enable-multilib \
 %endif
-	--disable-libgcj \
-	--without-ppl --without-cloog \
+	--with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions \
+	--enable-gnu-unique-object --enable-linker-build-id --with-gcc-major-version-only \
+%ifnarch %{mips}
+	--with-linker-hash-style=gnu \
+%endif
+	--enable-plugin --enable-initfini-array \
+	--without-isl \
+	--disable-libmpx \
+	--disable-libsanitizer \
 %if 0%{?rhel} < 7
-	--with-mpc=`pwd`/mpc-install \
+	--with-mpc=%{buildroot}/obj-%{gcc_target_platform}/mpc-install \
 %endif
-%if 0%{?rhel} >= 7
+%if 0%{?fedora} >= 21 || 0%{?rhel} >= 7
 %if %{attr_ifunc}
-        --enable-gnu-indirect-function \
+	--enable-gnu-indirect-function \
 %endif
 %endif
 %ifarch %{arm}
@@ -440,12 +526,16 @@ CC="$CC" CXX="$CXX" CFLAGS="$OPT_FLAGS" \
 %ifarch sparc sparcv9
 	--host=%{gcc_target_platform} --build=%{gcc_target_platform} --target=%{gcc_target_platform} --with-cpu=v7
 %endif
-%ifarch ppc ppc64 ppc64le ppc64p7
+%ifarch ppc ppc64 ppc64p7
 %if 0%{?rhel} >= 7
 	--with-cpu-32=power7 --with-tune-32=power7 --with-cpu-64=power7 --with-tune-64=power7 \
-%else
+%endif
+%if 0%{?rhel} == 6
 	--with-cpu-32=power4 --with-tune-32=power6 --with-cpu-64=power4 --with-tune-64=power6 \
 %endif
+%endif
+%ifarch ppc64le
+	--with-cpu-32=power8 --with-tune-32=power8 --with-cpu-64=power8 --with-tune-64=power8 \
 %endif
 %ifarch ppc
 	--build=%{gcc_target_platform} --target=%{gcc_target_platform} --with-cpu=default32
@@ -453,52 +543,110 @@ CC="$CC" CXX="$CXX" CFLAGS="$OPT_FLAGS" \
 %ifarch %{ix86} x86_64
 	--with-tune=generic \
 %endif
+%if 0%{?rhel} >= 7
+%ifarch %{ix86}
+	--with-arch=x86-64 \
+%endif
+%ifarch x86_64
+	--with-arch_32=x86-64 \
+%endif
+%else
 %ifarch %{ix86}
 	--with-arch=i686 \
 %endif
 %ifarch x86_64
 	--with-arch_32=i686 \
 %endif
+%endif
 %ifarch s390 s390x
-	--with-arch=z9-109 --with-tune=z10 --enable-decimal-float \
+%if 0%{?rhel} >= 7
+%if 0%{?rhel} >= 8
+	--with-arch=zEC12 --with-tune=z13 \
+%else
+	--with-arch=z196 --with-tune=zEC12 \
+%endif
+%else
+%if 0%{?fedora} >= 26
+	--with-arch=zEC12 --with-tune=z13 \
+%else
+	--with-arch=z9-109 --with-tune=z10 \
+%endif
+%endif
+	--enable-decimal-float \
+%endif
+%ifarch armv7hl
+	--with-tune=generic-armv7-a --with-arch=armv7-a \
+	--with-float=hard --with-fpu=vfpv3-d16 --with-abi=aapcs-linux \
+%endif
+%ifarch mips mipsel
+	--with-arch=mips32r2 --with-fp-32=xx \
+%endif
+%ifarch mips64 mips64el
+	--with-arch=mips64r2 --with-abi=64 \
 %endif
 %ifnarch sparc sparcv9 ppc
-	--build=%{gcc_target_platform}
+	--build=%{gcc_target_platform} \
+%endif
+	"
+
+CC="$CC" CXX="$CXX" CFLAGS="$OPT_FLAGS" \
+	CXXFLAGS="`echo " $OPT_FLAGS " | sed 's/ -Wall / /g;s/ -fexceptions / /g' \
+		  | sed 's/ -Wformat-security / -Wformat -Wformat-security /'`" \
+	XCFLAGS="$OPT_FLAGS" TCFLAGS="$OPT_FLAGS" \
+	../configure --disable-bootstrap \
+	--enable-languages=c,c++,fortran,lto \
+	$CONFIGURE_OPTS
+
+%ifarch sparc sparcv9 sparc64
+make %{?_smp_mflags} BOOT_CFLAGS="$OPT_FLAGS"
+%else
+make %{?_smp_mflags} BOOT_CFLAGS="$OPT_FLAGS"
 %endif
 
-GCJFLAGS="$OPT_FLAGS" make %{?_smp_mflags} BOOT_CFLAGS="$OPT_FLAGS"
 
 # Copy various doc files here and there
 cd ..
-mkdir -p rpm.doc/gfortran rpm.doc/libatomic rpm.doc/libitm rpm.doc/libcilkrts rpm.doc/libmpx
+mkdir -p rpm.doc/libquadmath rpm.doc/gfortran rpm.doc/libatomic rpm.doc/libitm
 
 (cd libgfortran; for i in ChangeLog*; do
 	cp -p $i ../rpm.doc/gfortran/$i.libgfortran
 done)
-
+%if %{build_libquadmath}
+(cd libquadmath; for i in ChangeLog*; do
+	cp -p $i ../rpm.doc/libquadmath/$i.libquadmath
+done)
+%endif
 %if %{build_libitm}
 (cd libitm; for i in ChangeLog*; do
 	cp -p $i ../rpm.doc/libitm/$i.libitm
 done)
 %endif
-
 %if %{build_libatomic}
 (cd libatomic; for i in ChangeLog*; do
 	cp -p $i ../rpm.doc/libatomic/$i.libatomic
 done)
 %endif
 
-%if %{build_libcilkrts}
-(cd libcilkrts; for i in ChangeLog*; do
-	cp -p $i ../rpm.doc/libcilkrts/$i.libcilkrts
-done)
-%endif
-
 rm -f rpm.doc/changelogs/gcc/ChangeLog.[1-9]
 find rpm.doc -name \*ChangeLog\* | xargs bzip2 -9
 
+# Handle GCC 7.  We'll not bootstrap as we're only interested in
+# libgfortran.so.4.
+cd gcc-%{gcc7_version}-%{DATE7}
+mkdir obj-%{gcc_target_platform}
+cd obj-%{gcc_target_platform}
+
+CC="$CC" CXX="$CXX" CFLAGS="$OPT_FLAGS" \
+	CXXFLAGS="`echo " $OPT_FLAGS " | sed 's/ -Wall / /g;s/ -fexceptions / /g' \
+		  | sed 's/ -Wformat-security / -Wformat -Wformat-security /'`" \
+	XCFLAGS="$OPT_FLAGS" TCFLAGS="$OPT_FLAGS" \
+	../configure --disable-bootstrap \
+	--enable-languages=c,c++,fortran,lto \
+	$CONFIGURE_OPTS
+make %{?_smp_mflags} BOOT_CFLAGS="$OPT_FLAGS"
+
 %install
-rm -fr %{buildroot}
+rm -rf %{buildroot}
 
 cd obj-%{gcc_target_platform}
 
@@ -531,19 +679,44 @@ cp -a temp/usr/%{_lib}/libatomic.so.1* %{buildroot}%{_prefix}/%{_lib}/
 cd ../..
 %endif
 
-%if %{build_libcilkrts}
-cd %{gcc_target_platform}/libcilkrts/
+%if %{build_libquadmath}
+cd %{gcc_target_platform}/libquadmath/
 mkdir temp
 make install DESTDIR=`pwd`/temp
-cp -a temp/usr/%{_lib}/libcilkrts.so.5* %{buildroot}%{_prefix}/%{_lib}/
+%if %{package_libquadmath}
+cp -a temp/usr/%{_lib}/libquadmath.so.0* %{buildroot}%{_prefix}/%{_lib}/
+%endif
 cd ../..
 %endif
+
+cd %{gcc_target_platform}/libgfortran/
+mkdir temp
+%if %{build_libquadmath}
+# It needs to find libquadmath.so.
+export LIBRARY_PATH=`pwd`/../../%{gcc_target_platform}/libquadmath/temp/usr/%{_lib}
+%endif
+make install DESTDIR=`pwd`/temp
+cp -a temp/usr/%{_lib}/libgfortran.so.5* %{buildroot}%{_prefix}/%{_lib}/
+cd ../..
+
+
+# Remove binaries we will not be including, so that they don't end up in
+# gcc-libraries-debuginfo.
+%if 0%{?rhel} >= 7
+# None.
+%endif
+
+rm -f gcc/libgcc_s.so
+ln -sf libgcc_s.so.1 gcc/libgcc_s.so
+
+
+# GCC 7.  Up to my old tricks again.
+cd ../gcc-%{gcc7_version}-%{DATE7}/obj-%{gcc_target_platform}
 
 %if %{build_libquadmath}
 cd %{gcc_target_platform}/libquadmath/
 mkdir temp
 make install DESTDIR=`pwd`/temp
-cp -a temp/usr/%{_lib}/libquadmath.so.0* %{buildroot}%{_prefix}/%{_lib}/
 cd ../..
 %endif
 
@@ -557,25 +730,11 @@ make install DESTDIR=`pwd`/temp
 cp -a temp/usr/%{_lib}/libgfortran.so.4* %{buildroot}%{_prefix}/%{_lib}/
 cd ../..
 
-
-# Remove binaries we will not be including, so that they don't end up in
-# gcc-libraries-debuginfo.
-%if 0%{?rhel} >= 7
-rm -f %{buildroot}%{_prefix}/%{_lib}/libquadmath.so*
-%endif
-
-rm -f gcc/libgcc_s.so
-ln -sf libgcc_s.so.1 gcc/libgcc_s.so
-
 %check
 cd obj-%{gcc_target_platform}
 
 # run the tests.
-%ifnarch ppc64le
 make %{?_smp_mflags} -k check RUNTESTFLAGS="--target_board=unix/'{,-fstack-protector}'" || :
-%else
-make %{?_smp_mflags} -k check || :
-%endif
 ( LC_ALL=C ../contrib/test_summary -t || : ) 2>&1 | sed -n '/^cat.*EOF/,/^EOF/{/^cat.*EOF/d;/^EOF/d;/^LAST_UPDATED:/d;p;}' > testresults
 echo ====================TESTING=========================
 cat testresults
@@ -588,8 +747,20 @@ tar cf - testlogs-%{_target_platform}-%{version}-%{release} | bzip2 -9c \
   | uuencode testlogs-%{_target_platform}.tar.bz2 || :
 rm -rf testlogs-%{_target_platform}-%{version}-%{release}
 
-%clean
-rm -rf %{buildroot}
+# GCC 7.  Only test Fortran.
+cd ../gcc-%{gcc7_version}-%{DATE7}/obj-%{gcc_target_platform}
+make %{?_smp_mflags} -C gcc check-gfortran || :
+( LC_ALL=C ../contrib/test_summary -t || : ) 2>&1 | sed -n '/^cat.*EOF/,/^EOF/{/^cat.*EOF/d;/^EOF/d;/^LAST_UPDATED:/d;p;}' > testresults
+echo ====================TESTING 7========================
+cat testresults
+echo ====================TESTING 7 END====================
+mkdir testlogs-%{_target_platform}-%{version}-%{release}
+for i in `find . -name \*.log | grep -F testsuite/ | grep -v 'config.log\|acats.*/tests/'`; do
+  ln $i testlogs-%{_target_platform}-%{version}-%{release}/ || :
+done
+tar cf - testlogs-%{_target_platform}-%{version}-%{release} | bzip2 -9c \
+  | uuencode testlogs-%{_target_platform}.tar.bz2 || :
+rm -rf testlogs-%{_target_platform}-%{version}-%{release}
 
 %post -n libitm
 /sbin/ldconfig
@@ -605,21 +776,25 @@ if [ -f %{_infodir}/libatomic.info.gz ]; then
     --info-dir=%{_infodir} %{_infodir}/libatomic.info.gz || :
 fi
 
-%post -n libcilkrts
-/sbin/ldconfig
-if [ -f %{_infodir}/libcilkrts.info.gz ]; then
-  /sbin/install-info \
-    --info-dir=%{_infodir} %{_infodir}/libcilkrts.info.gz || :
-fi
-
 %post -n libgfortran4
 /sbin/ldconfig
 if [ -f %{_infodir}/libgfortran.info.gz ]; then
   /sbin/install-info \
     --info-dir=%{_infodir} %{_infodir}/libgfortran.info.gz || :
 fi
+%post -n libgfortran5
+/sbin/ldconfig
+if [ -f %{_infodir}/libgfortran.info.gz ]; then
+  /sbin/install-info \
+    --info-dir=%{_infodir} %{_infodir}/libgfortran.info.gz || :
+fi
 
-%post -n libmpx -p /sbin/ldconfig
+%post -n libquadmath
+/sbin/ldconfig
+if [ -f %{_infodir}/libquadmath.info.gz ]; then
+  /sbin/install-info \
+    --info-dir=%{_infodir} %{_infodir}/libquadmath.info.gz || :
+fi
 
 %preun -n libitm
 if [ $1 = 0 -a -f %{_infodir}/libitm.info.gz ]; then
@@ -639,21 +814,27 @@ if [ $1 = 0 -a -f %{_infodir}/libgfortran.info.gz ]; then
     --info-dir=%{_infodir} %{_infodir}/libgfortran.info.gz || :
 fi
 
-%preun -n libcilkrts
-if [ $1 = 0 -a -f %{_infodir}/libcilkrts.info.gz ]; then
+%preun -n libgfortran5
+if [ $1 = 0 -a -f %{_infodir}/libgfortran.info.gz ]; then
   /sbin/install-info --delete \
-    --info-dir=%{_infodir} %{_infodir}/libcilkrts.info.gz || :
+    --info-dir=%{_infodir} %{_infodir}/libgfortran.info.gz || :
+fi
+
+%preun -n libquadmath
+if [ $1 = 0 -a -f %{_infodir}/libquadmath.info.gz ]; then
+  /sbin/install-info --delete \
+    --info-dir=%{_infodir} %{_infodir}/libquadmath.info.gz || :
 fi
 
 %postun -n libitm -p /sbin/ldconfig
 
 %postun -n libatomic -p /sbin/ldconfig
 
-%postun -n libcilkrts -p /sbin/ldconfig
-
 %postun -n libgfortran4 -p /sbin/ldconfig
 
-%postun -n libmpx -p /sbin/ldconfig
+%postun -n libgfortran5 -p /sbin/ldconfig
+
+%postun -n libquadmath -p /sbin/ldconfig
 
 %if %{build_libitm}
 %files -n libitm
@@ -672,23 +853,50 @@ fi
 %doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/libatomic/*
 %endif
 
-%if %{build_libcilkrts}
-%files -n libcilkrts
-%defattr(-,root,root,-)
-%{_prefix}/%{_lib}/libcilkrts.so.5*
-
-%doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/libcilkrts/*
-%endif
-
 %files -n libgfortran4
 %defattr(-,root,root,-)
 %{_prefix}/%{_lib}/libgfortran.so.4*
 
 %doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/gfortran/*
 
+%files -n libgfortran5
+%defattr(-,root,root,-)
+%{_prefix}/%{_lib}/libgfortran.so.5*
+
+%doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/gfortran/*
+
+%if %{package_libquadmath}
+%files -n libquadmath
+%defattr(-,root,root,-)
+%{_prefix}/%{_lib}/libquadmath.so.0*
+
+%doc gcc/COPYING3 COPYING.RUNTIME rpm.doc/libquadmath/*
+%endif
+
 %changelog
-* Thu Apr  5 2018 Marek Polacek <polacek@redhat.com> 7.2.1-1.2.1
-- Add support for DEC formatting extensions (#1564043)
+* Mon Aug 27 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.3.1
+- update 0022-Default-values-for-certain-field-descriptors-in-form.patch
+
+* Fri Jul 27 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.2.1
+- add %preun for libgfortran4
+
+* Fri Jul 27 2018 Marek Polacek <polacek@redhat.com> 8.2.1-1.1.1
+- update from gcc-8.2.1-1
+
+* Wed Jul 25 2018 Marek Polacek <polacek@redhat.com> 8.1.1-5.2.1
+- also package libgfortran4 (#1600265)
+
+* Tue Jul 10 2018 Marek Polacek <polacek@redhat.com> 8.1.1-5.1.1
+- update from gcc-8.1.1-5
+
+* Tue Jul 10 2018 Marek Polacek <polacek@redhat.com> 8.1.1-4.1.1
+- update from gcc-8.1.1-4
+
+* Wed Jun 13 2018 Marek Polacek <polacek@redhat.com> 7.3.1-5.1.1
+- update from devtoolset-7-gcc-7.3.1-5.10
+
+* Tue Apr  3 2018 Marek Polacek <polacek@redhat.com> 7.2.1-1.2.1
+- Add support for DEC formatting extensions (#1554430)
 
 * Thu Oct 19 2017 Marek Polacek <polacek@redhat.com> 7.2.1-1.1.1
 - update from gcc-7.2.1-1 (#1477224)
